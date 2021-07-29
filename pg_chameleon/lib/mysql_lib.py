@@ -529,6 +529,7 @@ class mysql_source(object):
         self.logger.debug("unlocking the tables")
         sql_unlock = "UNLOCK TABLES;"
         self.cursor_buffered.execute(sql_unlock)
+        self.logger.debug("tables unlocked")
 
     def get_master_coordinates(self):
         """
@@ -587,6 +588,7 @@ class mysql_source(object):
         table_txs = count_rows["transactions"] == "YES"
         if copy_limit == 0:
             copy_limit = 1000000
+        copy_limit = 100000
         num_slices = int(total_rows//copy_limit)
         range_slices = list(range(num_slices+1))
         total_slices = len(range_slices)
@@ -608,10 +610,12 @@ class mysql_source(object):
         if table_txs:
             self.unlock_tables()
         while True:
+            self.logger.info("Fetching %s limit" % (copy_limit,))
             csv_results = self.cursor_unbuffered.fetchmany(copy_limit)
             if len(csv_results) == 0:
                 break
             csv_data="\n".join(d[0] for d in csv_results )
+            csv_data = csv_data.replace('\x00','')
 
             if self.copy_mode == 'direct':
                 csv_file = io.StringIO()
@@ -620,12 +624,15 @@ class mysql_source(object):
 
             if self.copy_mode == 'file':
                 csv_file = codecs.open(out_file, 'wb', self.charset)
+                self.logger.debug("Saving CSV data to %s" % (csv_file,))
                 csv_file.write(csv_data)
                 csv_file.close()
                 csv_file = open(out_file, 'rb')
             try:
+                self.logger.debug("Copying to postgresql %s" % (csv_file,))
                 self.pg_engine.copy_data(csv_file, loading_schema, table, column_list)
-            except:
+            except Exception as e:
+                self.logger.info(e)
                 self.logger.info("Table %s.%s error in PostgreSQL copy, saving slice number for the fallback to insert statements " %  (loading_schema, table ))
                 slice_insert.append(slice)
 
@@ -633,6 +640,8 @@ class mysql_source(object):
             slice+=1
 
             csv_file.close()
+
+
         if len(slice_insert)>0:
             ins_arg={}
             ins_arg["slice_insert"] = slice_insert
@@ -677,6 +686,7 @@ class mysql_source(object):
         self.connect_db_unbuffered()
         loading_schema = self.schema_loading[schema]["loading"]
         num_insert = 1
+        self.logger.debug("Insert slices %s" % (slice_insert,))
         for slice in slice_insert:
             self.logger.info("Executing inserts in %s.%s. Slice %s. Rows per slice %s." %  (loading_schema, table, num_insert, copy_limit ,   ))
             offset = slice*copy_limit
@@ -736,7 +746,8 @@ class mysql_source(object):
         """
         self.cursor_buffered.execute(sql_index, (schema, table))
         index_data = self.cursor_buffered.fetchall()
-        table_pkey = self.pg_engine.create_indices(loading_schema, table, index_data)
+        table_metadata = self.get_table_metadata(table, schema)
+        table_pkey = self.pg_engine.create_indices(loading_schema, table, index_data, table_metadata)
         self.disconnect_db_buffered()
         return table_pkey
 
@@ -766,12 +777,15 @@ class mysql_source(object):
                         self.pg_engine.truncate_table(destination_schema,table)
                     else:
                         table_pkey = self.__create_indices(schema, table)
+                    self.logger.debug("Copying data")
                     master_status = self.copy_data(schema, table)
+                    self.logger.debug("Storing table")
                     self.pg_engine.store_table(destination_schema, table, table_pkey, master_status)
                     if self.keep_existing_schema:
                         self.logger.info("Adding constraint and indices to the destination table  %s.%s" %(destination_schema, table) )
                         self.pg_engine.create_idx_cons(destination_schema,table)
-                except:
+                except Exception as e:
+                    self.logger.error(e)
                     self.logger.info("Could not copy the table %s. Excluding it from the replica." %(table) )
                     raise
 
