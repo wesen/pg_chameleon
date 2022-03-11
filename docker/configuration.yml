@@ -1,0 +1,63 @@
+---
+# global settings
+pid_dir: './pid/'
+log_dir: './logs/'
+log_dest: stdout
+log_level: info
+log_days_keep: 10
+rollbar_key: ''
+rollbar_env: ''
+
+# type_override allows the user to override the default type conversion
+# into a different one.
+
+type_override:
+  "tinyint(1)":
+    override_to: boolean
+    override_tables:
+      - "*"
+
+
+# postgres  destination connection
+pg_conn:
+  host: "127.0.0.1"
+  port: "5432"
+  user: "postgres"
+  password: "pg_chameleon"
+  database: "postgres"
+  charset: "utf8"
+
+sources:
+  ttc_prod:
+    db_conn:
+      host: "127.0.0.1"
+      port: "3306"
+      user: "pg_chameleon"
+      password: "pg_chameleon"
+      charset: 'utf8'
+      connect_timeout: 10
+    schema_mappings:
+      pg_chameleon: pg_chameleon
+    limit_tables: [ ]
+    skip_tables:
+    grant_select_to:
+      - postgres
+    lock_timeout: "120s"
+    my_server_id: 100
+    replica_batch_size: 100000
+    replay_max_rows: 100000
+    batch_retention: '1 day'
+    copy_max_memory: "1000M"
+    copy_mode: 'file'
+    out_dir: ./tmp
+    sleep_loop: 1
+    on_error_replay: continue
+    on_error_read: continue
+    auto_maintenance: "disabled"
+    gtid_enable: false
+    type: mysql
+    skip_events:
+      insert:
+      delete:
+      update:
+    keep_existing_schema: No

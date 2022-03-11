@@ -1,0 +1,29 @@
+version: '3.3'
+
+volumes:
+  db-postgresql:
+  db-mysql:
+
+services:
+  mysql:
+    image: mysql:5.7
+    volumes:
+      - db-mysql:/var/lib/mysql
+      - ./my.cnf:/etc/mysql/conf.d/my.cnf:delegated
+    ports:
+      - "3306:3306"
+    environment:
+      MYSQL_ROOT_PASSWORD: "root"
+      MYSQL_DATABASE: "pg_chameleon"
+      MYSQL_USER: "pg_chameleon"
+      MYSQL_PASSWORD: "pg_chameleon"
+
+  postgresql:
+    image: postgres:14.2
+    volumes:
+      - db-postgresql:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_PASSWORD: "pg_chameleon"
+
