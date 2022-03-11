@@ -372,6 +372,8 @@ class pgsql_source(object):
         db_conn = db_copy["connection"]
         db_cursor = db_copy["cursor"]
 
+        self.logger.debug("Copying data to postgres %s %s" % (schema, table,))
+
         if self.snapshot_id:
             db_cursor.execute(sql_snap, (self.snapshot_id, ))
         self.logger.debug("exporting table %s.%s in %s" % (schema , table,  out_file))
@@ -732,8 +734,8 @@ class pg_engine(object):
         """
         self.connect_db()
         self.set_source_id()
-        
-        
+
+
         sql_gen_reset = """
             SELECT
                 format('SELECT setval(%%L::regclass,(select max(%%I) FROM %%I.%%I));',
@@ -3915,6 +3917,7 @@ class pg_engine(object):
             :param column_list: A string with the list of columns to use in the COPY FROM command already quoted and comma separated
         """
         sql_copy='COPY "%s"."%s" (%s) FROM STDIN WITH NULL \'NULL\' CSV QUOTE \'"\' DELIMITER \',\' ESCAPE \'"\' ; ' % (schema, table, column_list)
+        self.logger.debug("Copying data to PG %s schema %s table %s columns %s" % (csv_file, schema, table, column_list))
         self.pgsql_cur.copy_expert(sql_copy,csv_file)
 
     def insert_data(self, schema, table, insert_data , column_list):
@@ -3938,7 +3941,11 @@ class pg_engine(object):
                     self.logger.error("SQLCODE: %s SQLERROR: %s" % (e.pgcode, e.pgerror))
                     self.logger.error(self.pgsql_cur.mogrify(sql_head,data_row))
             except ValueError:
-                self.logger.warning("character mismatch when inserting the data, trying to cleanup the row data")
+                try:
+                    self.logger.warning("character mismatch when inserting the data, trying to cleanup the row data")
+                    self.logger.warning(self.pgsql_cur.mogrify(sql_head,data_row))
+                except:
+                    pass
                 cleanup_data_row = []
                 for item in data_row:
                     if item:
@@ -3996,7 +4003,7 @@ class pg_engine(object):
         pkey_col = self.pgsql_cur.fetchone()
         return pkey_col[0]
 
-    def create_indices(self, schema, table, index_data):
+    def create_indices(self, schema, table, index_data, table_metadata):
         """
             The method loops over the list index_data and creates the indices on the table
             specified with schema and table parameters.
@@ -4010,6 +4017,10 @@ class pg_engine(object):
         """
         idx_ddl = {}
         table_primary = []
+
+        columns_metadata = {
+            v['column_name']: v for v in table_metadata
+        }
         for index in index_data:
                 table_timestamp = str(int(time.time()))
                 indx = index["index_name"]
@@ -4018,7 +4029,7 @@ class pg_engine(object):
                 index_columns = ['"%s"' % column.strip() for column in idx_col]
                 non_unique = index["non_unique"]
                 if indx =='PRIMARY':
-                    pkey_name = "pk_%s" % (table)    
+                    pkey_name = "pk_%s" % (table)
                     pkey_def = 'ALTER TABLE "%s"."%s" ADD PRIMARY KEY (%s) ;' % (schema, table,  ','.join(index_columns))
                     idx_ddl[pkey_name] = pkey_def
                     table_primary = idx_col
@@ -4030,9 +4041,17 @@ class pg_engine(object):
                     else:
                         unique_key = ''
                     index_name='idx_%s_%s_%s_%s' % (indx[0:10], table[0:10], table_timestamp, self.idx_sequence)
-                    idx_def='CREATE %s INDEX "%s" ON "%s"."%s" (%s);' % (unique_key, indx, schema, table, ','.join(index_columns) )
+
+                    index_definition = "(%s)" % (','.join(index_columns),)
+                    if len(idx_col) == 1 and idx_col[0] in columns_metadata:
+                        column_metadata = columns_metadata[idx_col[0]]
+                        if column_metadata['data_type'] == 'longtext':
+                            index_definition = "USING GIN (to_tsvector('english', %s))" % (idx_col[0],)
+
+                    idx_def='CREATE %s INDEX "%s" ON "%s"."%s" (%s);' % (unique_key, indx, schema, table, index_definition)
                     idx_ddl[indx] = idx_def
                 self.idx_sequence+=1
+
         for index in idx_ddl:
             self.logger.info("Building index %s on %s.%s" % (index, schema, table))
             self.pgsql_cur.execute(idx_ddl[index])
