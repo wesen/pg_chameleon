@@ -1,30 +1,31 @@
+import binascii
+import datetime
+import decimal
 import io
+import json
+import multiprocessing as mp
+import os
+import sys
+import time
+
 import psycopg2
 from psycopg2 import sql
 from psycopg2.extras import RealDictCursor
-import sys
-import json
-import datetime
-import decimal
-import time
-import os
-import binascii
-from distutils.sysconfig import get_python_lib
-import multiprocessing as mp
+
 
 class pg_encoder(json.JSONEncoder):
     def default(self, obj):
-        if 	isinstance(obj, datetime.time) or \
-            isinstance(obj, datetime.datetime) or  \
-            isinstance(obj, datetime.date) or \
-            isinstance(obj, decimal.Decimal) or \
-            isinstance(obj, datetime.timedelta) or \
-            isinstance(obj, set) or\
-            isinstance(obj, frozenset) or\
-            isinstance(obj, bytes):
-
+        if isinstance(obj, datetime.time) or \
+                isinstance(obj, datetime.datetime) or \
+                isinstance(obj, datetime.date) or \
+                isinstance(obj, decimal.Decimal) or \
+                isinstance(obj, datetime.timedelta) or \
+                isinstance(obj, set) or \
+                isinstance(obj, frozenset) or \
+                isinstance(obj, bytes):
             return str(obj)
         return json.JSONEncoder.default(self, obj)
+
 
 class pgsql_source(object):
     def __init__(self):
@@ -56,17 +57,17 @@ class pgsql_source(object):
             int(copy_scale)
             copy_max_memory = self.source_config["copy_max_memory"]
         except:
-            if copy_scale =='k':
-                copy_max_memory = str(int(copy_max_memory)*1024)
-            elif copy_scale =='M':
-                copy_max_memory = str(int(copy_max_memory)*1024*1024)
-            elif copy_scale =='G':
-                copy_max_memory = str(int(copy_max_memory)*1024*1024*1024)
+            if copy_scale == 'k':
+                copy_max_memory = str(int(copy_max_memory) * 1024)
+            elif copy_scale == 'M':
+                copy_max_memory = str(int(copy_max_memory) * 1024 * 1024)
+            elif copy_scale == 'G':
+                copy_max_memory = str(int(copy_max_memory) * 1024 * 1024 * 1024)
             else:
-                print("**FATAL - invalid suffix in parameter copy_max_memory  (accepted values are (k)ilobytes, (M)egabytes, (G)igabytes.")
+                print(
+                    "**FATAL - invalid suffix in parameter copy_max_memory  (accepted values are (k)ilobytes, (M)egabytes, (G)igabytes.")
                 sys.exit(3)
         self.copy_max_memory = copy_max_memory
-
 
     def __init_sync(self):
         """
@@ -80,13 +81,12 @@ class pgsql_source(object):
         self.pg_engine.grant_select_to = self.source_config["grant_select_to"]
         self.source_conn = self.source_config["db_conn"]
         self.__set_copy_max_memory()
-        db_object = self.__connect_db( auto_commit=True, dict_cursor=True)
+        db_object = self.__connect_db(auto_commit=True, dict_cursor=True)
         self.pgsql_conn = db_object["connection"]
         self.pgsql_cursor = db_object["cursor"]
         self.pg_engine.connect_db()
         self.schema_mappings = self.pg_engine.get_schema_mappings()
         self.pg_engine.schema_tables = self.schema_tables
-
 
     def __connect_db(self, auto_commit=True, dict_cursor=False):
         """
@@ -98,13 +98,13 @@ class pgsql_source(object):
             :rtype: dictionary
         """
         if self.source_conn:
-            strconn = "dbname=%(database)s user=%(user)s host=%(host)s password=%(password)s port=%(port)s connect_timeout=%(connect_timeout)s"  % self.source_conn
+            strconn = "dbname=%(database)s user=%(user)s host=%(host)s password=%(password)s port=%(port)s connect_timeout=%(connect_timeout)s" % self.source_conn
             pgsql_conn = psycopg2.connect(strconn)
-            pgsql_conn .set_client_encoding(self.source_conn["charset"])
+            pgsql_conn.set_client_encoding(self.source_conn["charset"])
             if dict_cursor:
-                pgsql_cur = pgsql_conn .cursor(cursor_factory=RealDictCursor)
+                pgsql_cur = pgsql_conn.cursor(cursor_factory=RealDictCursor)
             else:
-                pgsql_cur = pgsql_conn .cursor()
+                pgsql_cur = pgsql_conn.cursor()
             self.logger.debug("Changing the autocommit flag to %s" % auto_commit)
             pgsql_conn.set_session(autocommit=auto_commit)
 
@@ -112,7 +112,7 @@ class pgsql_source(object):
             self.logger.error("Undefined database connection string. Exiting now.")
             sys.exit()
 
-        return {'connection': pgsql_conn, 'cursor': pgsql_cur }
+        return {'connection': pgsql_conn, 'cursor': pgsql_cur}
 
     def __export_snapshot(self, queue):
         """
@@ -125,7 +125,7 @@ class pgsql_source(object):
         self.logger.debug("exporting database snapshot for source %s" % self.source)
         sql_snap = """
             BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ;
-            SELECT pg_export_snapshot();
+            SELECT PG_EXPORT_SNAPSHOT();
         """
         db_snap = self.__connect_db(False)
         db_conn = db_snap["connection"]
@@ -152,14 +152,13 @@ class pgsql_source(object):
         limit_tables = self.source_config["limit_tables"]
         skip_tables = self.source_config["skip_tables"]
 
-        if self.tables !='*':
+        if self.tables != '*':
             tables = [table.strip() for table in self.tables.split(',')]
             if limit_tables:
                 limit_tables = [table for table in tables if table in limit_tables]
             else:
                 limit_tables = tables
             self.schema_only = {table.split('.')[0] for table in limit_tables}
-
 
         if limit_tables:
             table_limit = [table.split('.') for table in limit_tables]
@@ -170,7 +169,7 @@ class pgsql_source(object):
                     list_exclude.append(table_list[1])
                 except KeyError:
                     list_exclude.append(table_list[1])
-                self.limit_tables[table_list[0]]  = list_exclude
+                self.limit_tables[table_list[0]] = list_exclude
         if skip_tables:
             table_skip = [table.split('.') for table in skip_tables]
             for table_list in table_skip:
@@ -180,16 +179,14 @@ class pgsql_source(object):
                     list_exclude.append(table_list[1])
                 except KeyError:
                     list_exclude.append(table_list[1])
-                self.skip_tables[table_list[0]]  = list_exclude
-
-
+                self.skip_tables[table_list[0]] = list_exclude
 
     def __get_table_list(self):
         """
             The method pulls the table list from the information_schema.
             The list is stored in a dictionary  which key is the table's schema.
         """
-        sql_tables="""
+        sql_tables = """
             SELECT
                 table_name
             FROM
@@ -200,7 +197,7 @@ class pgsql_source(object):
             ;
         """
         for schema in self.schema_list:
-            self.pgsql_cursor.execute(sql_tables, (schema, ))
+            self.pgsql_cursor.execute(sql_tables, (schema,))
             table_list = [table["table_name"] for table in self.pgsql_cursor.fetchall()]
             try:
                 limit_tables = self.limit_tables[schema]
@@ -230,7 +227,7 @@ class pgsql_source(object):
         for schema in self.schema_list:
             destination_schema = self.schema_mappings[schema]
             loading_schema = "_%s_tmp" % destination_schema[0:59]
-            self.schema_loading[schema] = {'destination':destination_schema, 'loading':loading_schema}
+            self.schema_loading[schema] = {'destination': destination_schema, 'loading': loading_schema}
             self.logger.debug("Creating the schema %s." % loading_schema)
             self.pg_engine.create_database_schema(loading_schema)
             self.logger.debug("Creating the schema %s." % destination_schema)
@@ -246,20 +243,20 @@ class pgsql_source(object):
             :return: table's metadata as a cursor dictionary
             :rtype: dictionary
         """
-        sql_metadata="""
+        sql_metadata = """
             SELECT
-                col.attname as column_name,
+                col.attname AS column_name,
                 (
                     SELECT
-                        pg_catalog.pg_get_expr(def.adbin, def.adrelid)
+                        pg_catalog.PG_GET_EXPR(def.adbin, def.adrelid)
                     FROM
                         pg_catalog.pg_attrdef def
                     WHERE
                             def.adrelid = col.attrelid
                         AND def.adnum = col.attnum
                         AND col.atthasdef
-                ) as column_default,
-                col.attnum as ordinal_position,
+                ) AS column_default,
+                col.attnum AS ordinal_position,
                 CASE
                     WHEN typ.typcategory ='E'
                     THEN
@@ -269,26 +266,26 @@ class pgsql_source(object):
                         'composite'
 
                 ELSE
-                    pg_catalog.format_type(col.atttypid, col.atttypmod)
+                    pg_catalog.FORMAT_TYPE(col.atttypid, col.atttypmod)
                 END
                 AS type_format,
                 (
                     SELECT
-                        pg_get_serial_sequence(format('%%I.%%I',tabsch.nspname,tab.relname), col.attname) IS NOT NULL
+                        PG_GET_SERIAL_SEQUENCE(FORMAT('%%I.%%I',tabsch.nspname,tab.relname), col.attname) IS NOT NULL
                     FROM
                         pg_catalog.pg_class tab
                         INNER JOIN pg_catalog.pg_namespace tabsch
                         ON	tab.relnamespace=tabsch.oid
                     WHERE
                         tab.oid=col.attrelid
-                ) as col_serial,
-                typ.typcategory as type_category,
+                ) AS col_serial,
+                typ.typcategory AS type_category,
                 CASE
                     WHEN typ.typcategory='E'
                     THEN
                     (
                         SELECT
-                            string_agg(quote_literal(enumlabel),',')
+                            STRING_AGG(QUOTE_LITERAL(enumlabel),',')
                         FROM
                             pg_catalog.pg_enum enm
                         WHERE enm.enumtypid=typ.oid
@@ -297,10 +294,10 @@ class pgsql_source(object):
                     THEN
                     (
                         SELECT
-                            string_agg(
-                                format('%%I %%s',
+                            STRING_AGG(
+                                FORMAT('%%I %%s',
                                     attname,
-                                    pg_catalog.format_type(atttypid, atttypmod)
+                                    pg_catalog.FORMAT_TYPE(atttypid, atttypmod)
                                 )
                             ,
                             ','
@@ -308,13 +305,13 @@ class pgsql_source(object):
                         FROM
                             pg_catalog.pg_attribute
                         WHERE
-                            attrelid=format(
+                            attrelid=FORMAT(
                                 '%%I.%%I',
                                 sch.nspname,
                                 typ.typname)::regclass
                             )
                 END AS typ_elements,
-                col.attnotnull as not_null
+                col.attnotnull AS not_null
             FROM
                 pg_catalog.pg_attribute col
                 INNER JOIN pg_catalog.pg_type typ
@@ -331,10 +328,9 @@ class pgsql_source(object):
             ;
         """
         tab_regclass = '"%s"."%s"' % (schema, table)
-        self.pgsql_cursor.execute(sql_metadata, (tab_regclass, ))
-        table_metadata=self.pgsql_cursor.fetchall()
+        self.pgsql_cursor.execute(sql_metadata, (tab_regclass,))
+        table_metadata = self.pgsql_cursor.fetchall()
         return table_metadata
-
 
     def __create_destination_tables(self):
         """
@@ -364,7 +360,7 @@ class pgsql_source(object):
             BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ;
             SET TRANSACTION SNAPSHOT %s;
         """
-        out_file = '%s/%s_%s.csv' % (self.out_dir, schema, table )
+        out_file = '%s/%s_%s.csv' % (self.out_dir, schema, table)
         loading_schema = self.schema_loading[schema]["loading"]
         from_table = '"%s"."%s"' % (schema, table)
         to_table = '"%s"."%s"' % (loading_schema, table)
@@ -375,13 +371,13 @@ class pgsql_source(object):
         self.logger.debug("Copying data to postgres %s %s" % (schema, table,))
 
         if self.snapshot_id:
-            db_cursor.execute(sql_snap, (self.snapshot_id, ))
-        self.logger.debug("exporting table %s.%s in %s" % (schema , table,  out_file))
+            db_cursor.execute(sql_snap, (self.snapshot_id,))
+        self.logger.debug("exporting table %s.%s in %s" % (schema, table, out_file))
         copy_file = open(out_file, 'wb')
         db_cursor.copy_to(copy_file, from_table)
 
         copy_file.close()
-        self.logger.debug("loading the file %s in table %s.%s " % (out_file,  loading_schema , table,  ))
+        self.logger.debug("loading the file %s in table %s.%s " % (out_file, loading_schema, table,))
 
         copy_file = open(out_file, 'rb')
         self.pg_engine.pgsql_cur.copy_from(copy_file, to_table)
@@ -391,8 +387,6 @@ class pgsql_source(object):
             os.remove(out_file)
         except:
             pass
-
-
 
     def __create_indices(self):
         """
@@ -407,23 +401,23 @@ class pgsql_source(object):
                 CASE
                     WHEN con.conname IS NOT NULL
                     THEN
-                        format('ALTER TABLE %%I ADD CONSTRAINT %%I %%s ;',tab.relname,con.conname,pg_get_constraintdef(con.oid))
+                        FORMAT('ALTER TABLE %%I ADD CONSTRAINT %%I %%s ;',tab.relname,con.conname,PG_GET_CONSTRAINTDEF(con.oid))
                     ELSE
-                        format('%%s ;',regexp_replace(pg_get_indexdef(idx.oid), '("?\w+"?\.)', ''))
+                        FORMAT('%%s ;',REGEXP_REPLACE(PG_GET_INDEXDEF(idx.oid), '("?\w+"?\.)', ''))
                 END AS ddl_text,
                 CASE
                     WHEN con.conname IS NOT NULL
                     THEN
-                        format('primary key on %%I',tab.relname)
+                        FORMAT('primary key on %%I',tab.relname)
                     ELSE
-                        format('index %%I on %%I',idx.relname,tab.relname)
+                        FORMAT('index %%I on %%I',idx.relname,tab.relname)
                 END AS ddl_msg,
                 CASE
                     WHEN con.conname IS NOT NULL
                     THEN
-                        True
+                        TRUE
                     ELSE
-                        False
+                        FALSE
                 END AS table_pk
             FROM
 
@@ -457,7 +451,7 @@ class pgsql_source(object):
             for table in table_list:
                 loading_schema = self.schema_loading[schema]["loading"]
                 destination_schema = self.schema_loading[schema]["destination"]
-                self.pg_engine.pgsql_cur.execute('SET search_path=%s;', (loading_schema, ))
+                self.pg_engine.pgsql_cur.execute('SET search_path=%s;', (loading_schema,))
                 db_cursor.execute(sql_get_idx, (table, schema))
                 idx_tab = db_cursor.fetchall()
                 for idx in idx_tab:
@@ -465,10 +459,9 @@ class pgsql_source(object):
                     try:
                         self.pg_engine.pgsql_cur.execute(idx[0])
                     except:
-                        self.logger.error("an error occcurred when executing %s" %(idx[0]))
+                        self.logger.error("an error occcurred when executing %s" % (idx[0]))
                     if idx[2]:
                         self.pg_engine.store_table(destination_schema, table, ['foo'], None)
-
 
         db_conn.close()
 
@@ -490,7 +483,7 @@ class pgsql_source(object):
         db_conn.commit()
         if not db_in_recovery[0]:
             queue = mp.Queue()
-            snap_exp = mp.Process(target=self.__export_snapshot, args=(queue,), name='snap_export',daemon=True)
+            snap_exp = mp.Process(target=self.__export_snapshot, args=(queue,), name='snap_export', daemon=True)
             snap_exp.start()
             self.snapshot_id = queue.get()
             self.consistent = False
@@ -526,7 +519,7 @@ class pgsql_source(object):
             self.pg_engine.swap_schemas()
             self.__drop_loading_schemas()
             self.pg_engine.set_source_status("initialised")
-            fake_master = [{'File': None, 'Position': None }]
+            fake_master = [{'File': None, 'Position': None}]
             self.pg_engine.set_source_highwatermark(fake_master, consistent=self.consistent)
             notifier_message = "init replica for source %s is complete" % self.source
             self.notifier.send_message(notifier_message, 'info')
@@ -538,74 +531,71 @@ class pgsql_source(object):
             self.notifier.send_message(notifier_message, 'critical')
             self.logger.critical(notifier_message)
 
-
             raise
-
 
 
 class pg_engine(object):
     def __init__(self):
-        python_lib=python_lib=os.path.dirname(os.path.realpath(__file__))
+        python_lib = python_lib = os.path.dirname(os.path.realpath(__file__))
         self.sql_dir = "%s/../sql/" % python_lib
         self.sql_upgrade_dir = "%s/upgrade/" % self.sql_dir
-        self.table_ddl={}
-        self.idx_ddl={}
-        self.type_ddl={}
-        self.idx_sequence=0
+        self.table_ddl = {}
+        self.idx_ddl = {}
+        self.type_ddl = {}
+        self.idx_sequence = 0
         self.type_dictionary = {
-            'integer':'integer',
-            'mediumint':'bigint',
-            'tinyint':'integer',
-            'smallint':'integer',
-            'int':'integer',
-            'bigint':'bigint',
-            'varchar':'character varying',
-            'character varying':'character varying',
-            'text':'text',
-            'char':'character',
-            'datetime':'timestamp without time zone',
-            'date':'date',
-            'time':'time without time zone',
-            'timestamp':'timestamp without time zone',
-            'tinytext':'text',
-            'mediumtext':'text',
-            'longtext':'text',
-            'tinyblob':'bytea',
-            'mediumblob':'bytea',
-            'longblob':'bytea',
-            'blob':'bytea',
-            'binary':'bytea',
-            'varbinary':'bytea',
-            'decimal':'numeric',
-            'double':'double precision',
-            'double precision':'double precision',
-            'float':'double precision',
-            'bit':'integer',
-            'year':'integer',
-            'enum':'enum',
-            'set':'text',
-            'json':'json',
-            'bool':'boolean',
-            'boolean':'boolean',
+            'integer': 'integer',
+            'mediumint': 'bigint',
+            'tinyint': 'integer',
+            'smallint': 'integer',
+            'int': 'integer',
+            'bigint': 'bigint',
+            'varchar': 'character varying',
+            'character varying': 'character varying',
+            'text': 'text',
+            'char': 'character',
+            'datetime': 'timestamp without time zone',
+            'date': 'date',
+            'time': 'time without time zone',
+            'timestamp': 'timestamp without time zone',
+            'tinytext': 'text',
+            'mediumtext': 'text',
+            'longtext': 'text',
+            'tinyblob': 'bytea',
+            'mediumblob': 'bytea',
+            'longblob': 'bytea',
+            'blob': 'bytea',
+            'binary': 'bytea',
+            'varbinary': 'bytea',
+            'decimal': 'numeric',
+            'double': 'double precision',
+            'double precision': 'double precision',
+            'float': 'double precision',
+            'bit': 'integer',
+            'year': 'integer',
+            'enum': 'enum',
+            'set': 'text',
+            'json': 'json',
+            'bool': 'boolean',
+            'boolean': 'boolean',
         }
         self.dest_conn = None
         self.pgsql_conn = None
         self.logger = None
         self.idx_sequence = 0
         self.lock_timeout = 0
-        self.keep_existing_schema=False
+        self.keep_existing_schema = False
         self.migrations = [
-            {'version': '2.0.1',  'script': '200_to_201.sql'},
-            {'version': '2.0.2',  'script': '201_to_202.sql'},
-            {'version': '2.0.3',  'script': '202_to_203.sql'},
-            {'version': '2.0.4',  'script': '203_to_204.sql'},
-            {'version': '2.0.5',  'script': '204_to_205.sql'},
-            {'version': '2.0.6',  'script': '205_to_206.sql'},
-            {'version': '2.0.7',  'script': '206_to_207.sql'},
-            {'version': '2.0.8',  'script': '207_to_208.sql'},
-            {'version': '2.0.9',  'script': '208_to_209.sql'},
+            {'version': '2.0.1', 'script': '200_to_201.sql'},
+            {'version': '2.0.2', 'script': '201_to_202.sql'},
+            {'version': '2.0.3', 'script': '202_to_203.sql'},
+            {'version': '2.0.4', 'script': '203_to_204.sql'},
+            {'version': '2.0.5', 'script': '204_to_205.sql'},
+            {'version': '2.0.6', 'script': '205_to_206.sql'},
+            {'version': '2.0.7', 'script': '206_to_207.sql'},
+            {'version': '2.0.8', 'script': '207_to_208.sql'},
+            {'version': '2.0.9', 'script': '208_to_209.sql'},
         ]
-
 
     def check_postgis(self):
         """
@@ -613,7 +603,7 @@ class pg_engine(object):
         """
         sql_check = """
             SELECT
-                count(*)=1
+                COUNT(*)=1
             FROM
                 pg_extension
             WHERE
@@ -625,26 +615,27 @@ class pg_engine(object):
         self.postgis_present = postgis_check[0]
         if self.postgis_present:
             spatial_data = {
-            'geometry':'geometry',
-            'point':'geometry',
-            'linestring':'geometry',
-            'polygon':'geometry',
-            'multipoint':'geometry',
-            'geometrycollection':'geometry',
-            'multilinestring':'geometry',
+                'geometry': 'geometry',
+                'point': 'geometry',
+                'linestring': 'geometry',
+                'polygon': 'geometry',
+                'multipoint': 'geometry',
+                'geometrycollection': 'geometry',
+                'multilinestring': 'geometry',
             }
         else:
             spatial_data = {
-            'geometry':'bytea',
-            'point':'bytea',
-            'linestring':'bytea',
-            'polygon':'bytea',
-            'multipoint':'bytea',
-            'geometrycollection':'bytea',
-            'multilinestring':'bytea',
+                'geometry': 'bytea',
+                'point': 'bytea',
+                'linestring': 'bytea',
+                'polygon': 'bytea',
+                'multipoint': 'bytea',
+                'geometrycollection': 'bytea',
+                'multilinestring': 'bytea',
             }
         self.type_dictionary.update(spatial_data.items())
         return postgis_check[0]
+
     def __del__(self):
         """
             Class destructor, tries to disconnect the postgresql connection.
@@ -663,7 +654,6 @@ class pg_engine(object):
         self.logger.debug("Changing the autocommit flag to %s" % auto_commit)
         self.pgsql_conn.set_session(autocommit=auto_commit)
 
-
     def connect_db(self):
         """
             Connects to PostgreSQL using the parameters stored in self.dest_conn. The dictionary is built using the parameters set via adding the key dbname to the self.pg_conn dictionary.
@@ -671,17 +661,16 @@ class pg_engine(object):
             dedicated connection and cursor.
         """
         if self.dest_conn and not self.pgsql_conn:
-            strconn = "dbname=%(database)s user=%(user)s host=%(host)s password=%(password)s port=%(port)s"  % self.dest_conn
+            strconn = "dbname=%(database)s user=%(user)s host=%(host)s password=%(password)s port=%(port)s" % self.dest_conn
             self.pgsql_conn = psycopg2.connect(strconn)
-            self.pgsql_conn .set_client_encoding(self.dest_conn["charset"])
+            self.pgsql_conn.set_client_encoding(self.dest_conn["charset"])
             self.set_autocommit_db(True)
-            self.pgsql_cur = self.pgsql_conn .cursor()
+            self.pgsql_cur = self.pgsql_conn.cursor()
         elif not self.dest_conn:
             self.logger.error("Undefined database connection string. Exiting now.")
             sys.exit()
         elif self.pgsql_conn:
             self.logger.debug("There is already a database connection active.")
-
 
     def disconnect_db(self):
         """
@@ -699,13 +688,13 @@ class pg_engine(object):
             The method sets the lock timeout using the value stored in the class attribute lock_timeout.
         """
         self.logger.debug("Changing the lock timeout for the session to %s." % self.lock_timeout)
-        self.pgsql_cur.execute("SET LOCK_TIMEOUT =%s;",  (self.lock_timeout, ))
+        self.pgsql_cur.execute("SET LOCK_TIMEOUT =%s;", (self.lock_timeout,))
 
     def unset_lock_timeout(self):
         """
             The method sets the lock timeout using the value stored in the class attribute lock_timeout.
         """
-        self.logger.debug("Disabling the lock timeout for the session." )
+        self.logger.debug("Disabling the lock timeout for the session.")
         self.pgsql_cur.execute("SET LOCK_TIMEOUT ='0';")
 
     def create_replica_schema(self):
@@ -717,7 +706,7 @@ class pg_engine(object):
         num_schema = self.check_replica_schema()[0]
         if num_schema == 0:
             self.logger.debug("Creating the replica schema.")
-            file_schema = open(self.sql_dir+"create_schema.sql", 'rb')
+            file_schema = open(self.sql_dir + "create_schema.sql", 'rb')
             sql_schema = file_schema.read()
             file_schema.close()
             self.pgsql_cur.execute(sql_schema)
@@ -735,39 +724,38 @@ class pg_engine(object):
         self.connect_db()
         self.set_source_id()
 
-
         sql_gen_reset = """
             SELECT
-                format('SELECT setval(%%L::regclass,(select max(%%I) FROM %%I.%%I));',
-                    replace(replace(column_default,'nextval(''',''),'''::regclass)',''),
+                FORMAT('SELECT setval(%%L::regclass,(select max(%%I) FROM %%I.%%I));',
+                    REPLACE(REPLACE(column_default,'nextval(''',''),'''::regclass)',''),
                     column_name,
                     table_schema,
                     table_name
                 ),
-                replace(replace(column_default,'nextval(''',''),'''::regclass)','') as  seq_name
+                REPLACE(REPLACE(column_default,'nextval(''',''),'''::regclass)','') AS  seq_name
             FROM
                     information_schema.columns
             WHERE
                     table_schema IN (
                         SELECT
-                            (jsonb_each_text(jsb_schema_mappings)).value
+                            (JSONB_EACH_TEXT(jsb_schema_mappings)).value
                         FROM
                             sch_chameleon.t_sources
                         WHERE
                             i_id_source=%s
                         )
-                AND	column_default like 'nextval%%'
+                AND	column_default LIKE 'nextval%%'
 
         ;"""
-        self.pgsql_cur.execute(sql_gen_reset, (self.i_id_source, ))
+        self.pgsql_cur.execute(sql_gen_reset, (self.i_id_source,))
         reset_statements = self.pgsql_cur.fetchall()
         try:
             for statement in reset_statements:
                 self.logger.info("resetting the sequence  %s" % statement[1])
                 self.pgsql_cur.execute(statement[0])
         except psycopg2.Error as e:
-                    self.logger.error("SQLCODE: %s SQLERROR: %s" % (e.pgcode, e.pgerror))
-                    self.logger.error(statement)
+            self.logger.error("SQLCODE: %s SQLERROR: %s" % (e.pgcode, e.pgerror))
+            self.logger.error(statement)
         except:
             raise
         if not self.keep_existing_schema:
@@ -791,8 +779,9 @@ class pg_engine(object):
             ref_columns = foreign_key["ref_columns"]
             on_update = foreign_key["on_update"]
             on_delete = foreign_key["on_delete"]
-            fk_list.append({'fkey_name':fk_name, 'table_name':table_name, 'table_schema':table_schema})
-            sql_fkey = ("""ALTER TABLE "%s"."%s" ADD CONSTRAINT "%s" FOREIGN KEY (%s) REFERENCES "%s"."%s" (%s) %s %s  NOT VALID;""" %
+            fk_list.append({'fkey_name': fk_name, 'table_name': table_name, 'table_schema': table_schema})
+            sql_fkey = (
+                    """ALTER TABLE "%s"."%s" ADD CONSTRAINT "%s" FOREIGN KEY (%s) REFERENCES "%s"."%s" (%s) %s %s  NOT VALID;""" %
                     (
                         table_schema,
                         table_name,
@@ -804,26 +793,29 @@ class pg_engine(object):
                         on_update,
                         on_delete
                     )
-                )
-            fk_counter+=1
+            )
+            fk_counter += 1
             self.logger.info("creating invalid foreign key %s on table %s.%s" % (fk_name, table_schema, table_name))
             try:
                 self.pgsql_cur.execute(sql_fkey)
             except psycopg2.Error as e:
-                    self.logger.error("could not create the foreign key %s on table %s.%s" % (fk_name, table_schema, table_name))
-                    self.logger.error("SQLCODE: %s SQLERROR: %s" % (e.pgcode, e.pgerror))
-                    self.logger.error("STATEMENT: %s " % (sql_fkey))
-
+                self.logger.error(
+                    "could not create the foreign key %s on table %s.%s" % (fk_name, table_schema, table_name))
+                self.logger.error("SQLCODE: %s SQLERROR: %s" % (e.pgcode, e.pgerror))
+                self.logger.error("STATEMENT: %s " % (sql_fkey))
 
         for fkey in fk_list:
-            self.logger.info("validating %s on table %s.%s"  % (fkey["fkey_name"], fkey["table_schema"], fkey["table_name"]))
-            sql_validate = 'ALTER TABLE "%s"."%s" VALIDATE CONSTRAINT "%s";' % (fkey["table_schema"], fkey["table_name"], fkey["fkey_name"])
+            self.logger.info(
+                "validating %s on table %s.%s" % (fkey["fkey_name"], fkey["table_schema"], fkey["table_name"]))
+            sql_validate = 'ALTER TABLE "%s"."%s" VALIDATE CONSTRAINT "%s";' % (
+                fkey["table_schema"], fkey["table_name"], fkey["fkey_name"])
             try:
                 self.pgsql_cur.execute(sql_validate)
             except psycopg2.Error as e:
-                    self.logger.error("could not validate the foreign key %s on table %s" % (fkey["table_name"], fkey["fkey_name"]))
-                    self.logger.error("SQLCODE: %s SQLERROR: %s" % (e.pgcode, e.pgerror))
-                    self.logger.error("STATEMENT: %s " % (sql_validate))
+                self.logger.error(
+                    "could not validate the foreign key %s on table %s" % (fkey["table_name"], fkey["fkey_name"]))
+                self.logger.error("SQLCODE: %s SQLERROR: %s" % (e.pgcode, e.pgerror))
+                self.logger.error("STATEMENT: %s " % (sql_validate))
 
     def get_inconsistent_tables(self):
         """
@@ -850,18 +842,17 @@ class pg_engine(object):
         ;
         """
         inc_dic = {}
-        self.pgsql_cur.execute(sql_get, (self.i_id_source, ))
+        self.pgsql_cur.execute(sql_get, (self.i_id_source,))
         inc_results = self.pgsql_cur.fetchall()
-        for table  in inc_results:
+        for table in inc_results:
             tab_dic = {}
             dic_key = "%s.%s" % (table[0], table[1])
-            tab_dic["schema"]  = table[0]
-            tab_dic["table"]  = table[1]
-            tab_dic["log_seq"]  = int(table[2].split('.')[1])
-            tab_dic["log_pos"]  = int(table[3])
+            tab_dic["schema"] = table[0]
+            tab_dic["table"] = table[1]
+            tab_dic["log_seq"] = int(table[2].split('.')[1])
+            tab_dic["log_pos"] = int(table[3])
             inc_dic[dic_key] = tab_dic
         return inc_dic
-
 
     def grant_select(self):
         """
@@ -870,25 +861,31 @@ class pg_engine(object):
             In the case a role doesn't exist the method emits an error message and skips the missing user.
         """
         if self.grant_select_to:
-            for schema in  self.schema_loading:
+            for schema in self.schema_loading:
                 schema_loading = self.schema_loading[schema]["loading"]
-                self.logger.info("Granting select on tables in schema %s to the role(s) %s." % (schema_loading,','.join(self.grant_select_to)))
+                self.logger.info("Granting select on tables in schema %s to the role(s) %s." % (
+                    schema_loading, ','.join(self.grant_select_to)))
                 for db_role in self.grant_select_to:
-                    sql_grant_usage = sql.SQL("GRANT USAGE ON SCHEMA {} TO {};").format(sql.Identifier(schema_loading), sql.Identifier(db_role))
-                    sql_alter_default_privs = sql.SQL("ALTER DEFAULT PRIVILEGES IN SCHEMA {} GRANT SELECT ON TABLES TO {};").format(sql.Identifier(schema_loading), sql.Identifier(db_role))
+                    sql_grant_usage = sql.SQL("GRANT USAGE ON SCHEMA {} TO {};").format(sql.Identifier(schema_loading),
+                                                                                        sql.Identifier(db_role))
+                    sql_alter_default_privs = sql.SQL(
+                        "ALTER DEFAULT PRIVILEGES IN SCHEMA {} GRANT SELECT ON TABLES TO {};").format(
+                        sql.Identifier(schema_loading), sql.Identifier(db_role))
                     try:
                         self.pgsql_cur.execute(sql_grant_usage)
                         self.pgsql_cur.execute(sql_alter_default_privs)
                         for table in self.schema_tables[schema]:
-                            self.logger.info("Granting select on table %s.%s to the role %s." % (schema_loading, table,db_role))
-                            sql_grant_select = sql.SQL("GRANT SELECT ON TABLE {}.{} TO {};").format(sql.Identifier(schema_loading), sql.Identifier(table), sql.Identifier(db_role))
+                            self.logger.info(
+                                "Granting select on table %s.%s to the role %s." % (schema_loading, table, db_role))
+                            sql_grant_select = sql.SQL("GRANT SELECT ON TABLE {}.{} TO {};").format(
+                                sql.Identifier(schema_loading), sql.Identifier(table), sql.Identifier(db_role))
                             try:
                                 self.pgsql_cur.execute(sql_grant_select)
                             except psycopg2.Error as er:
                                 self.logger.error("SQLCODE: %s SQLERROR: %s" % (er.pgcode, er.pgerror))
                     except psycopg2.Error as e:
                         if e.pgcode == "42704":
-                            self.logger.warning("The role %s does not exist" % (db_role, ))
+                            self.logger.warning("The role %s does not exist" % (db_role,))
                         else:
                             self.logger.error("SQLCODE: %s SQLERROR: %s" % (e.pgcode, e.pgerror))
 
@@ -945,7 +942,7 @@ class pg_engine(object):
                     i_id_source=%s
             ;
         """
-        self.pgsql_cur.execute(sql_count, (self.i_id_source, ))
+        self.pgsql_cur.execute(sql_count, (self.i_id_source,))
         maintenance_running = self.pgsql_cur.fetchone()
         return maintenance_running[0]
 
@@ -958,7 +955,7 @@ class pg_engine(object):
                 SET b_maintenance='t'
             WHERE i_id_source=%s;
         """
-        self.pgsql_cur.execute(sql_start, (self.i_id_source, ))
+        self.pgsql_cur.execute(sql_start, (self.i_id_source,))
 
     def end_maintenance(self):
         """
@@ -969,7 +966,7 @@ class pg_engine(object):
                 SET b_maintenance='f'
             WHERE i_id_source=%s;
         """
-        self.pgsql_cur.execute(sql_end, (self.i_id_source, ))
+        self.pgsql_cur.execute(sql_end, (self.i_id_source,))
 
     def __pause_replica(self, others):
         """
@@ -985,7 +982,7 @@ class pg_engine(object):
                 SET b_paused='t'
             %s
         """ % where_cond
-        self.pgsql_cur.execute(sql_pause, (self.i_id_source, ))
+        self.pgsql_cur.execute(sql_pause, (self.i_id_source,))
 
     def __resume_replica(self, others):
         """
@@ -1001,7 +998,7 @@ class pg_engine(object):
                 SET b_paused='f'
             %s
         """ % where_cond
-        self.pgsql_cur.execute(sql_resume, (self.i_id_source, ))
+        self.pgsql_cur.execute(sql_resume, (self.i_id_source,))
 
     def __set_last_maintenance(self):
         """
@@ -1009,12 +1006,11 @@ class pg_engine(object):
         """
         sql_set = """
             UPDATE sch_chameleon.t_sources
-                SET ts_last_maintenance=now()
+                SET ts_last_maintenance=NOW()
             WHERE
                 i_id_source=%s;
         """
-        self.pgsql_cur.execute(sql_set, (self.i_id_source, ))
-
+        self.pgsql_cur.execute(sql_set, (self.i_id_source,))
 
     def get_replica_paused(self):
         """
@@ -1031,10 +1027,9 @@ class pg_engine(object):
                 i_id_source=%s
             ;
         """
-        self.pgsql_cur.execute(sql_get, (self.i_id_source, ))
+        self.pgsql_cur.execute(sql_get, (self.i_id_source,))
         replica_paused = self.pgsql_cur.fetchone()
         return replica_paused[0]
-
 
     def __wait_for_self_pause(self):
         """
@@ -1087,7 +1082,7 @@ class pg_engine(object):
         self.logger.info("Waiting for the replica daemons to pause")
         wait_result = 'wait'
         while wait_result == 'wait':
-            self.pgsql_cur.execute(sql_wait, (self.i_id_source, ))
+            self.pgsql_cur.execute(sql_wait, (self.i_id_source,))
             wait_result = self.pgsql_cur.fetchone()[0]
             time.sleep(5)
 
@@ -1100,13 +1095,13 @@ class pg_engine(object):
         sql_vacuum = """
             SELECT
                 v_log_table,
-                format('VACUUM FULL sch_chameleon.%%I ;',
+                FORMAT('VACUUM FULL sch_chameleon.%%I ;',
                 v_log_table
                 )
             FROM
             (
                 SELECT
-                    unnest(v_log_table) AS v_log_table
+                    UNNEST(v_log_table) AS v_log_table
                 FROM
                     sch_chameleon.t_sources
                 WHERE
@@ -1114,7 +1109,7 @@ class pg_engine(object):
             ) log
             ;
         """
-        self.pgsql_cur.execute(sql_vacuum, (self.i_id_source, ))
+        self.pgsql_cur.execute(sql_vacuum, (self.i_id_source,))
         vacuum_sql = self.pgsql_cur.fetchall()
         for sql_stat in vacuum_sql:
             self.logger.info("Running VACUUM FULL on the table %s" % (sql_stat[0]))
@@ -1123,8 +1118,6 @@ class pg_engine(object):
             except:
                 self.logger.error("An error occurred when running VACUUM FULL on the table %s" % (sql_stat[0]))
 
-
-
     def __vacuum_log_tables(self):
         """
             The method runs a VACUUM on the log tables for the given source
@@ -1132,13 +1125,13 @@ class pg_engine(object):
         sql_vacuum = """
             SELECT
                 v_log_table,
-                format('VACUUM sch_chameleon.%%I ;',
+                FORMAT('VACUUM sch_chameleon.%%I ;',
                 v_log_table
                 )
             FROM
             (
                 SELECT
-                    unnest(v_log_table) AS v_log_table
+                    UNNEST(v_log_table) AS v_log_table
                 FROM
                     sch_chameleon.t_sources
                 WHERE
@@ -1146,7 +1139,7 @@ class pg_engine(object):
             ) log
             ;
         """
-        self.pgsql_cur.execute(sql_vacuum, (self.i_id_source, ))
+        self.pgsql_cur.execute(sql_vacuum, (self.i_id_source,))
         vacuum_sql = self.pgsql_cur.fetchall()
         for sql_stat in vacuum_sql:
             self.logger.info("Running VACUUM on the table %s" % (sql_stat[0]))
@@ -1154,7 +1147,6 @@ class pg_engine(object):
                 self.pgsql_cur.execute(sql_stat[1])
             except:
                 self.logger.error("An error occurred when running VACUUM on the table %s" % (sql_stat[0]))
-
 
     def run_maintenance(self):
         """
@@ -1189,7 +1181,6 @@ class pg_engine(object):
             self.notifier.send_message(notifier_message, 'info')
             self.logger.info(notifier_message)
 
-
     def replay_replica(self):
         """
             The method replays the row images in the target database using the function
@@ -1216,13 +1207,13 @@ class pg_engine(object):
             continue_loop = True
             self.source_config = self.sources[self.source]
             replay_max_rows = self.source_config["replay_max_rows"]
-            exit_on_error = True if self.source_config["on_error_replay"]=='exit' else False
+            exit_on_error = True if self.source_config["on_error_replay"] == 'exit' else False
             while continue_loop:
                 sql_replay = """SELECT * FROM sch_chameleon.fn_replay_mysql(%s,%s,%s);""";
                 self.pgsql_cur.execute(sql_replay, (replay_max_rows, self.i_id_source, exit_on_error))
                 replay_status = self.pgsql_cur.fetchone()
                 if replay_status[0]:
-                    self.logger.info("Replayed at most %s rows for source %s" % (replay_max_rows, self.source) )
+                    self.logger.info("Replayed at most %s rows for source %s" % (replay_max_rows, self.source))
                 replica_paused = self.get_replica_paused()
                 if replica_paused:
                     break
@@ -1233,7 +1224,6 @@ class pg_engine(object):
                 if replay_status[2]:
                     tables_error.append(replay_status[2])
         return tables_error
-
 
     def set_consistent_table(self, table, schema):
         """
@@ -1277,10 +1267,9 @@ class pg_engine(object):
                 AND	v_table_name=%s
             ;
         """
-        self.pgsql_cur.execute(sql_pkey, (schema, table, ))
+        self.pgsql_cur.execute(sql_pkey, (schema, table,))
         table_pkey = self.pgsql_cur.fetchone()
         return table_pkey[0]
-
 
     def cleanup_replayed_batches(self):
         """
@@ -1289,7 +1278,7 @@ class pg_engine(object):
         self.connect_db()
         source_config = self.sources[self.source]
         batch_retention = source_config["batch_retention"]
-        self.logger.debug("Cleaning replayed batches for source %s older than %s" % (self.source,batch_retention) )
+        self.logger.debug("Cleaning replayed batches for source %s older than %s" % (self.source, batch_retention))
         sql_cleanup = """
             DELETE FROM
                 sch_chameleon.t_replica_batch
@@ -1297,14 +1286,14 @@ class pg_engine(object):
                     b_started
                 AND b_processed
                 AND b_replayed
-                AND now()-ts_replayed>%s::interval
+                AND NOW()-ts_replayed>%s::interval
                 AND i_id_source=%s
             ;
         """
-        self.pgsql_cur.execute(sql_cleanup, (batch_retention, self.i_id_source ))
+        self.pgsql_cur.execute(sql_cleanup, (batch_retention, self.i_id_source))
         self.disconnect_db()
 
-    def __generate_ddl(self, token,  destination_schema):
+    def __generate_ddl(self, token, destination_schema):
         """
             The method builds the DDL using the tokenised SQL stored in token.
             The supported commands are
@@ -1323,22 +1312,23 @@ class pg_engine(object):
         """
 
         count_table = self.__count_table_schema(token["name"], destination_schema)
-        query=""
-        if token["command"] =="CREATE TABLE":
+        query = ""
+        if token["command"] == "CREATE TABLE":
             table_metadata = token["columns"]
             table_name = token["name"]
             index_data = token["indices"]
-            table_ddl = self.__build_create_table_mysql(table_metadata,  table_name,  destination_schema, temporary_schema=False)
+            table_ddl = self.__build_create_table_mysql(table_metadata, table_name, destination_schema,
+                                                        temporary_schema=False)
             table_enum = ''.join(table_ddl["enum"])
             table_statement = table_ddl["table"]
-            index_ddl = self.build_create_index( destination_schema, table_name, index_data)
+            index_ddl = self.build_create_index(destination_schema, table_name, index_data)
             table_pkey = index_ddl[0]
-            table_indices = ''.join([val for key ,val in index_ddl[1].items()])
+            table_indices = ''.join([val for key, val in index_ddl[1].items()])
             self.store_table(destination_schema, table_name, table_pkey, None)
-            query = "%s %s %s " % (table_enum, table_statement,  table_indices)
+            query = "%s %s %s " % (table_enum, table_statement, table_indices)
         else:
             if count_table == 1:
-                if token["command"] =="RENAME TABLE":
+                if token["command"] == "RENAME TABLE":
                     old_name = token["name"]
                     new_name = token["new_name"]
                     query = """ALTER TABLE "%s"."%s" RENAME TO "%s" """ % (destination_schema, old_name, new_name)
@@ -1346,12 +1336,12 @@ class pg_engine(object):
                     if table_pkey:
                         self.store_table(destination_schema, new_name, table_pkey, None)
                 elif token["command"] == "DROP TABLE":
-                    query=""" DROP TABLE IF EXISTS "%s"."%s";""" % (destination_schema, token["name"])
+                    query = """ DROP TABLE IF EXISTS "%s"."%s";""" % (destination_schema, token["name"])
                 elif token["command"] == "TRUNCATE":
-                    query=""" TRUNCATE TABLE "%s"."%s" CASCADE;""" % (destination_schema, token["name"])
+                    query = """ TRUNCATE TABLE "%s"."%s" CASCADE;""" % (destination_schema, token["name"])
 
                 elif token["command"] == "ALTER TABLE":
-                    query=self.build_alter_table(destination_schema, token)
+                    query = self.build_alter_table(destination_schema, token)
                 elif token["command"] == "DROP PRIMARY KEY":
                     self.__drop_primary_key(destination_schema, token)
         return query
@@ -1368,25 +1358,25 @@ class pg_engine(object):
             :return: a dictionary with the pre_alter and post_alter statements (e.g. pre alter create type , post alter drop type)
             :rtype: dictionary
         """
-        enum_name="enum_%s_%s" % (enm_dic['table'], enm_dic['column'])
+        enum_name = "enum_%s_%s" % (enm_dic['table'], enm_dic['column'])
 
         sql_check_enum = """
             SELECT
                 typ.typcategory,
                 typ.typname,
-                sch_typ.nspname as typschema,
+                sch_typ.nspname AS typschema,
                 CASE
                     WHEN typ.typcategory='E'
                     THEN
                     (
                         SELECT
-                            array_agg(enumlabel)
+                            ARRAY_AGG(enumlabel)
                         FROM
                             pg_enum
                         WHERE
                             enumtypid=typ.oid
                     )
-                END enum_list
+                END AS enum_list
             FROM
                 pg_type typ
                 INNER JOIN pg_namespace sch_typ
@@ -1397,8 +1387,8 @@ class pg_engine(object):
                 AND	typ.typname=%s
             ;
         """
-        self.pgsql_cur.execute(sql_check_enum, (schema,  enum_name))
-        type_data=self.pgsql_cur.fetchone()
+        self.pgsql_cur.execute(sql_check_enum, (schema, enum_name))
+        type_data = self.pgsql_cur.fetchone()
         return_dic = {}
         pre_alter = ""
         post_alter = ""
@@ -1409,28 +1399,27 @@ class pg_engine(object):
                 self.logger.debug('There is already the enum %s, altering the type')
                 new_enums = [val.strip() for val in enm_dic["enum_list"] if val.strip() not in type_data[3]]
                 sql_add = []
-                for enumeration in  new_enums:
-                    sql_add =  """ALTER TYPE "%s"."%s" ADD VALUE '%s';""" % (type_data[2], enum_name, enumeration)
+                for enumeration in new_enums:
+                    sql_add = """ALTER TYPE "%s"."%s" ADD VALUE '%s';""" % (type_data[2], enum_name, enumeration)
                     self.pgsql_cur.execute(sql_add)
 
             elif type_data[0] != 'E' and enm_dic["type"] == 'enum':
                 self.logger.debug('The column will be altered in enum, creating the type')
-                pre_alter = """CREATE TYPE "%s"."%s" AS ENUM (%s);""" % (schema,enum_name, enm_dic["enum_elements"])
+                pre_alter = """CREATE TYPE "%s"."%s" AS ENUM (%s);""" % (schema, enum_name, enm_dic["enum_elements"])
 
             elif type_data[0] == 'E' and enm_dic["type"] != 'enum':
                 self.logger.debug('The column is no longer an enum, dropping the type')
-                post_alter = """DROP TYPE "%s"."%s"; """ % (schema,enum_name)
+                post_alter = """DROP TYPE "%s"."%s"; """ % (schema, enum_name)
             column_type = """ "%s"."%s" """ % (schema, enum_name)
         elif not type_data and enm_dic["type"] == 'enum':
-                self.logger.debug('Creating a new enumeration type %s' % (enum_name))
-                pre_alter = """CREATE TYPE "%s"."%s" AS ENUM (%s);""" % (schema,enum_name, enm_dic["enum_elements"])
-                column_type = """ "%s"."%s" """ % (schema, enum_name)
+            self.logger.debug('Creating a new enumeration type %s' % (enum_name))
+            pre_alter = """CREATE TYPE "%s"."%s" AS ENUM (%s);""" % (schema, enum_name, enm_dic["enum_elements"])
+            column_type = """ "%s"."%s" """ % (schema, enum_name)
 
         return_dic["column_type"] = column_type
         return_dic["pre_alter"] = pre_alter
-        return_dic["post_alter"]  = post_alter
+        return_dic["post_alter"] = post_alter
         return return_dic
-
 
     def build_alter_table(self, schema, token):
         """
@@ -1456,83 +1445,89 @@ class pg_engine(object):
         alter_cmd = []
         ddl_pre_alter = []
         ddl_post_alter = []
-        query_cmd=token["command"]
-        table_name=token["name"]
+        query_cmd = token["command"]
+        table_name = token["name"]
 
         for alter_dic in token["alter_cmd"]:
             if alter_dic["command"] == 'DROP':
                 alter_cmd.append("%(command)s %(name)s CASCADE" % alter_dic)
             elif alter_dic["command"] == 'ADD':
 
-                column_type=self.get_data_type(alter_dic, schema, table_name)
+                column_type = self.get_data_type(alter_dic, schema, table_name)
                 column_name = alter_dic["name"]
                 enum_list = str(alter_dic["dimension"]).replace("'", "").split(",")
-                enm_dic = {'table':table_name, 'column':column_name, 'type':column_type, 'enum_list': enum_list, 'enum_elements':alter_dic["dimension"]}
+                enm_dic = {'table': table_name, 'column': column_name, 'type': column_type, 'enum_list': enum_list,
+                           'enum_elements': alter_dic["dimension"]}
                 enm_alter = self.build_enum_ddl(schema, enm_dic)
                 ddl_pre_alter.append(enm_alter["pre_alter"])
-                column_type= enm_alter["column_type"]
-                if 	column_type in ["character varying", "character", 'numeric', 'bit', 'float']:
-                        column_type = column_type+"("+str(alter_dic["dimension"])+")"
+                column_type = enm_alter["column_type"]
+                if column_type in ["character varying", "character", 'numeric', 'bit', 'float']:
+                    column_type = column_type + "(" + str(alter_dic["dimension"]) + ")"
                 if alter_dic["default"]:
                     default_value = "DEFAULT %s::%s" % (alter_dic["default"], column_type.strip())
                 else:
-                    default_value=""
-                alter_cmd.append("%s \"%s\" %s NULL %s" % (alter_dic["command"], column_name, column_type, default_value))
+                    default_value = ""
+                alter_cmd.append(
+                    "%s \"%s\" %s NULL %s" % (alter_dic["command"], column_name, column_type, default_value))
             elif alter_dic["command"] == 'CHANGE':
                 sql_rename = ""
                 sql_type = ""
-                old_column=alter_dic["old"]
-                new_column=alter_dic["new"]
+                old_column = alter_dic["old"]
+                new_column = alter_dic["new"]
                 column_name = old_column
                 enum_list = str(alter_dic["dimension"]).replace("'", "").split(",")
 
-                column_type=self.get_data_type(alter_dic, schema, table_name)
+                column_type = self.get_data_type(alter_dic, schema, table_name)
                 default_sql = self.generate_default_statements(schema, table_name, old_column, new_column)
-                enm_dic = {'table':table_name, 'column':column_name, 'type':column_type, 'enum_list': enum_list, 'enum_elements':alter_dic["dimension"]}
+                enm_dic = {'table': table_name, 'column': column_name, 'type': column_type, 'enum_list': enum_list,
+                           'enum_elements': alter_dic["dimension"]}
                 enm_alter = self.build_enum_ddl(schema, enm_dic)
 
                 ddl_pre_alter.append(enm_alter["pre_alter"])
                 ddl_pre_alter.append(default_sql["drop"])
                 ddl_post_alter.append(enm_alter["post_alter"])
                 ddl_post_alter.append(default_sql["create"])
-                column_type= enm_alter["column_type"]
+                column_type = enm_alter["column_type"]
 
-                if column_type=="character varying" or column_type=="character" or column_type=='numeric' or column_type=='bit' or column_type=='float':
-                        column_type=column_type+"("+str(alter_dic["dimension"])+")"
-                sql_type = """ALTER TABLE "%s"."%s" ALTER COLUMN "%s" SET DATA TYPE %s  USING "%s"::%s ;;""" % (schema, table_name, old_column, column_type, old_column, column_type)
+                if column_type == "character varying" or column_type == "character" or column_type == 'numeric' or column_type == 'bit' or column_type == 'float':
+                    column_type = column_type + "(" + str(alter_dic["dimension"]) + ")"
+                sql_type = """ALTER TABLE "%s"."%s" ALTER COLUMN "%s" SET DATA TYPE %s  USING "%s"::%s ;;""" % (
+                    schema, table_name, old_column, column_type, old_column, column_type)
                 if old_column != new_column:
-                    sql_rename="""ALTER TABLE "%s"."%s" RENAME COLUMN "%s" TO "%s" ;""" % (schema, table_name, old_column, new_column)
+                    sql_rename = """ALTER TABLE "%s"."%s" RENAME COLUMN "%s" TO "%s" ;""" % (
+                        schema, table_name, old_column, new_column)
 
                 query = ' '.join(ddl_pre_alter)
-                query += sql_type+sql_rename
+                query += sql_type + sql_rename
                 query += ' '.join(ddl_post_alter)
                 return query
 
             elif alter_dic["command"] == 'MODIFY':
-                column_type=self.get_data_type(alter_dic, schema, table_name)
+                column_type = self.get_data_type(alter_dic, schema, table_name)
                 column_name = alter_dic["name"]
 
                 enum_list = str(alter_dic["dimension"]).replace("'", "").split(",")
                 default_sql = self.generate_default_statements(schema, table_name, column_name)
-                enm_dic = {'table':table_name, 'column':column_name, 'type':column_type, 'enum_list': enum_list, 'enum_elements':alter_dic["dimension"]}
+                enm_dic = {'table': table_name, 'column': column_name, 'type': column_type, 'enum_list': enum_list,
+                           'enum_elements': alter_dic["dimension"]}
                 enm_alter = self.build_enum_ddl(schema, enm_dic)
 
                 ddl_pre_alter.append(enm_alter["pre_alter"])
                 ddl_pre_alter.append(default_sql["drop"])
                 ddl_post_alter.append(enm_alter["post_alter"])
                 ddl_post_alter.append(default_sql["create"])
-                column_type= enm_alter["column_type"]
-                if column_type=="character varying" or column_type=="character" or column_type=='numeric' or column_type=='bit' or column_type=='float':
-                        column_type=column_type+"("+str(alter_dic["dimension"])+")"
+                column_type = enm_alter["column_type"]
+                if column_type == "character varying" or column_type == "character" or column_type == 'numeric' or column_type == 'bit' or column_type == 'float':
+                    column_type = column_type + "(" + str(alter_dic["dimension"]) + ")"
                 query = ' '.join(ddl_pre_alter)
-                query +=  """ALTER TABLE "%s"."%s" ALTER COLUMN "%s" SET DATA TYPE %s USING "%s"::%s ;""" % (schema, table_name, column_name, column_type, column_name, column_type)
+                query += """ALTER TABLE "%s"."%s" ALTER COLUMN "%s" SET DATA TYPE %s USING "%s"::%s ;""" % (
+                    schema, table_name, column_name, column_type, column_name, column_type)
                 query += ' '.join(ddl_post_alter)
                 return query
         query = ' '.join(ddl_pre_alter)
-        query +=  """%s "%s"."%s" %s;""" % (query_cmd , schema,  table_name,', '.join(alter_cmd))
+        query += """%s "%s"."%s" %s;""" % (query_cmd, schema, table_name, ', '.join(alter_cmd))
         query += ' '.join(ddl_post_alter)
         return query
-
 
     def __drop_primary_key(self, schema, token):
         """
@@ -1545,9 +1540,9 @@ class pg_engine(object):
             :param token: the tokenised query for drop primary key
         """
         self.logger.info("dropping primary key for table %s.%s" % (schema, token["name"],))
-        sql_gen="""
+        sql_gen = """
             SELECT  DISTINCT
-                format('ALTER TABLE %%I.%%I DROP CONSTRAINT %%I;',
+                FORMAT('ALTER TABLE %%I.%%I DROP CONSTRAINT %%I;',
                 table_schema,
                 table_name,
                 constraint_name
@@ -1560,9 +1555,9 @@ class pg_engine(object):
             ;
         """
         self.pgsql_cur.execute(sql_gen, (schema, token["name"]))
-        value_check=self.pgsql_cur.fetchone()
+        value_check = self.pgsql_cur.fetchone()
         if value_check:
-            sql_drop=value_check[0]
+            sql_drop = value_check[0]
             self.pgsql_cur.execute(sql_drop)
             self.unregister_table(schema, token["name"])
 
@@ -1573,7 +1568,7 @@ class pg_engine(object):
         """
         sql_count = """
             SELECT
-                count(*)
+                COUNT(*)
             FROM
                 sch_chameleon.t_sources
             WHERE
@@ -1612,31 +1607,31 @@ class pg_engine(object):
         sql_view = """
             CREATE OR REPLACE VIEW sch_chameleon.v_version
                 AS
-                    SELECT %s::TEXT t_version
+                    SELECT %s::TEXT AS t_version
         ;"""
 
         self.connect_db()
         sources_active = self.__count_active_sources()
         if sources_active[0] == 0:
             catalog_version = self.get_catalog_version()
-            catalog_number = int(''.join([value  for value in catalog_version.split('.')]))
+            catalog_number = int(''.join([value for value in catalog_version.split('.')]))
             self.connect_db()
             for migration in self.migrations:
                 migration_version = migration["version"]
-                migration_number = int(''.join([value  for value in migration_version.split('.')]))
-                if migration_number>catalog_number:
+                migration_number = int(''.join([value for value in migration_version.split('.')]))
+                if migration_number > catalog_number:
                     migration_file_name = '%s/%s' % (self.sql_upgrade_dir, migration["script"])
-                    print("Migrating the catalogue from version %s to version %s" % (catalog_version,  migration_version))
+                    print(
+                        "Migrating the catalogue from version %s to version %s" % (catalog_version, migration_version))
                     migration_data = open(migration_file_name, 'rb')
                     migration_sql = migration_data.read()
                     migration_data.close()
                     self.pgsql_cur.execute(migration_sql)
-                    self.pgsql_cur.execute(sql_view, (migration_version, ))
+                    self.pgsql_cur.execute(sql_view, (migration_version,))
         else:
-            print('There are sources in running or syncing state. You shall stop all the replica processes before upgrading the catalogue.')
+            print(
+                'There are sources in running or syncing state. You shall stop all the replica processes before upgrading the catalogue.')
             sys.exit()
-
-
 
     def upgrade_catalogue_v1(self):
         """
@@ -1677,15 +1672,15 @@ class pg_engine(object):
             WITH t_old_new AS
                 (
                 SELECT
-                    old.i_id_source as id_source_old,
-                    new.i_id_source as id_source_new,
+                    old.i_id_source AS id_source_old,
+                    new.i_id_source AS id_source_new,
                     new.t_dest_schema
                 FROM
                     _sch_chameleon_version1.t_sources  old
                     INNER JOIN (
                             SELECT
                                 i_id_source,
-                                (jsonb_each_text(jsb_schema_mappings)).value as t_dest_schema
+                                (JSONB_EACH_TEXT(jsb_schema_mappings)).value AS t_dest_schema
                             FROM
                                 sch_chameleon.t_sources
 
@@ -1707,10 +1702,10 @@ class pg_engine(object):
                 id_source_new,
                 v_table_name,
                 t_dest_schema,
-                string_to_array(replace(v_table_pkey[1],'"',''),',') as table_pkey,
+                STRING_TO_ARRAY(REPLACE(v_table_pkey[1],'"',''),',') AS table_pkey,
                 bat.t_binlog_name,
                 bat.i_binlog_position,
-                't'::boolean as b_replica_enabled
+                't'::boolean AS b_replica_enabled
 
             FROM
                 _sch_chameleon_version1.t_replica_batch bat
@@ -1730,18 +1725,18 @@ class pg_engine(object):
 
             WITH t_mapping AS
                 (
-                    SELECT json_each_text(%s::json) AS t_sch_map
+                    SELECT JSON_EACH_TEXT(%s::json) AS t_sch_map
                 )
 
             SELECT
-                mapped_schema=config_schema as match_mapping,
+                mapped_schema=config_schema AS match_mapping,
                 mapped_list,
                 config_list
             FROM
             (
                 SELECT
-                    count(dst.t_sch_map) as mapped_schema,
-                    string_agg((dst.t_sch_map).value,' ') as mapped_list
+                    COUNT(dst.t_sch_map) AS mapped_schema,
+                    STRING_AGG((dst.t_sch_map).value,' ') AS mapped_list
                 FROM
                     t_mapping dst
                     INNER JOIN sch_chameleon.t_sources src
@@ -1751,8 +1746,8 @@ class pg_engine(object):
             ) cnt_map,
             (
                 SELECT
-                    count(t_sch_map) as config_schema,
-                    string_agg((t_sch_map).value,' ') as config_list
+                    COUNT(t_sch_map) AS config_schema,
+                    STRING_AGG((t_sch_map).value,' ') AS config_list
                 FROM
                     t_mapping
 
@@ -1766,7 +1761,7 @@ class pg_engine(object):
             SELECT
                 src.i_id_source,
                 src.t_source,
-                count(log.i_id_event)
+                COUNT(log.i_id_event)
             FROM
                 sch_chameleon.t_log_replica log
                 INNER JOIN sch_chameleon.t_replica_batch bat
@@ -1790,28 +1785,30 @@ class pg_engine(object):
                 continue_loop = True
                 while continue_loop:
                     sql_replay = """SELECT sch_chameleon.fn_process_batch(%s,%s);"""
-                    self.pgsql_cur.execute(sql_replay, (replay_max_rows, id_source, ))
+                    self.pgsql_cur.execute(sql_replay, (replay_max_rows, id_source,))
                     replay_status = self.pgsql_cur.fetchone()
                     continue_loop = replay_status[0]
                     if continue_loop:
-                        self.logger.info("Still replaying rows for source %s" % ( source_name, ) )
+                        self.logger.info("Still replaying rows for source %s" % (source_name,))
         self.logger.info("Checking if the schema mappings are correctly matched")
         for source in self.sources:
             schema_mappings = json.dumps(self.sources[source]["schema_mappings"])
-            self.pgsql_cur.execute(sql_mapping, (schema_mappings, ))
+            self.pgsql_cur.execute(sql_mapping, (schema_mappings,))
             config_mapping = self.pgsql_cur.fetchone()
             source_mapped = config_mapping[0]
             list_mapped = config_mapping[1]
             list_config = config_mapping[2]
             if not source_mapped:
-                self.logger.error("Checks for source %s failed. Matched mappings %s, configured mappings %s" % (source, list_mapped, list_config))
+                self.logger.error("Checks for source %s failed. Matched mappings %s, configured mappings %s" % (
+                    source, list_mapped, list_config))
                 upgrade_possible = False
         if upgrade_possible:
             try:
                 self.logger.info("Renaming the old schema %s in %s " % (self.__v2_schema, self.__v1_schema))
-                sql_rename_old = sql.SQL("ALTER SCHEMA {} RENAME TO {};").format(sql.Identifier(self.__current_schema), sql.Identifier(self.__v1_schema))
+                sql_rename_old = sql.SQL("ALTER SCHEMA {} RENAME TO {};").format(sql.Identifier(self.__current_schema),
+                                                                                 sql.Identifier(self.__v1_schema))
                 self.pgsql_cur.execute(sql_rename_old)
-                self.logger.info("Installing the new replica catalogue " )
+                self.logger.info("Installing the new replica catalogue ")
                 self.create_replica_schema()
                 for source in self.sources:
                     self.source = source
@@ -1821,7 +1818,7 @@ class pg_engine(object):
                 for source in self.sources:
                     self.source = source
                     self.set_source_id()
-                    self.pgsql_cur.execute(sql_get_min_max, (self.i_id_source, ))
+                    self.pgsql_cur.execute(sql_get_min_max, (self.i_id_source,))
                     min_max = self.pgsql_cur.fetchone()
                     max_position = min_max[0]
                     min_position = min_max[1]
@@ -1850,34 +1847,36 @@ class pg_engine(object):
         """
             The procedure rollsback the upgrade dropping the schema sch_chameleon and renaming the version 1 to the
         """
-        sql_check="""
+        sql_check = """
             SELECT
-                count(*)
+                COUNT(*)
             FROM
                 information_schema.schemata
             WHERE
                 schema_name=%s
         """
-        self.pgsql_cur.execute(sql_check, (self.__v1_schema, ))
+        self.pgsql_cur.execute(sql_check, (self.__v1_schema,))
         v1_schema = self.pgsql_cur.fetchone()
         if v1_schema[0] == 1:
             self.logger.info("The schema %s exists, rolling back the changes" % (self.__v1_schema))
-            self.pgsql_cur.execute(sql_check, (self.__current_schema, ))
+            self.pgsql_cur.execute(sql_check, (self.__current_schema,))
             curr_schema = self.pgsql_cur.fetchone()
             if curr_schema[0] == 1:
                 self.logger.info("Renaming the current schema %s in %s" % (self.__current_schema, self.__v2_schema))
-                sql_rename_current = sql.SQL("ALTER SCHEMA {} RENAME TO {};").format(sql.Identifier(self.__current_schema), sql.Identifier(self.__v2_schema))
+                sql_rename_current = sql.SQL("ALTER SCHEMA {} RENAME TO {};").format(
+                    sql.Identifier(self.__current_schema), sql.Identifier(self.__v2_schema))
                 self.pgsql_cur.execute(sql_rename_current)
-            sql_rename_old = sql.SQL("ALTER SCHEMA {} RENAME TO {};").format(sql.Identifier(self.__v1_schema), sql.Identifier(self.__current_schema))
+            sql_rename_old = sql.SQL("ALTER SCHEMA {} RENAME TO {};").format(sql.Identifier(self.__v1_schema),
+                                                                             sql.Identifier(self.__current_schema))
             self.pgsql_cur.execute(sql_rename_old)
         else:
             self.logger.info("The old schema %s does not exists, aborting the rollback" % (self.__v1_schema))
             sys.exit()
-        self.logger.info("Rollback successful. Please note the catalogue version 2 has been renamed to %s for debugging.\nYou will need to drop it before running another upgrade" % (self.__v2_schema, ))
+        self.logger.info(
+            "Rollback successful. Please note the catalogue version 2 has been renamed to %s for debugging.\nYou will need to drop it before running another upgrade" % (
+                self.__v2_schema,))
 
-
-
-    def unregister_table(self, schema,  table):
+    def unregister_table(self, schema, table):
         """
             This method is used to remove a table from the replica catalogue.
             The table is just deleted from the table sch_chameleon.t_replica_tables.
@@ -1886,7 +1885,7 @@ class pg_engine(object):
             :param table: the table name to remove from t_replica_tables
         """
         self.logger.info("unregistering table %s.%s from the replica catalog" % (schema, table,))
-        sql_delete=""" DELETE FROM sch_chameleon.t_replica_tables
+        sql_delete = """ DELETE FROM sch_chameleon.t_replica_tables
                     WHERE
                             v_table_name=%s
                         AND	v_schema_name=%s
@@ -1900,14 +1899,12 @@ class pg_engine(object):
 
         """
         self.logger.info("deleting all the table references from the replica catalog for source %s " % (self.source,))
-        sql_delete=""" DELETE FROM sch_chameleon.t_replica_tables
+        sql_delete = """ DELETE FROM sch_chameleon.t_replica_tables
                     WHERE
                         i_id_source=%s
                     ;
                         """
-        self.pgsql_cur.execute(sql_delete, (self.i_id_source, ))
-
-
+        self.pgsql_cur.execute(sql_delete, (self.i_id_source,))
 
     def cleanup_table_events(self):
         """
@@ -1924,7 +1921,7 @@ class pg_engine(object):
             ;
         """
 
-        self.pgsql_cur.execute(sql_get_log_tables, (self.i_id_source, ))
+        self.pgsql_cur.execute(sql_get_log_tables, (self.i_id_source,))
         log_tables = self.pgsql_cur.fetchone()
         list_conditions = []
         for schema in self.schema_tables:
@@ -1932,12 +1929,12 @@ class pg_engine(object):
                 table_schema = self.schema_loading[schema]["destination"]
                 where_cond = "format('%%I.%%I','%s','%s')" % (table_schema, table_name)
                 list_conditions.append(where_cond)
-        sql_cleanup = "DELETE FROM sch_chameleon.{} WHERE format('%%I.%%I',v_schema_name,v_table_name) IN (%s) ;" % ' ,'.join(list_conditions)
+        sql_cleanup = "DELETE FROM sch_chameleon.{} WHERE format('%%I.%%I',v_schema_name,v_table_name) IN (%s) ;" % ' ,'.join(
+            list_conditions)
         for log_table in log_tables[0]:
             self.logger.debug("Cleaning up log events in log table %s " % (log_table,))
             sql_clean_log = sql.SQL(sql_cleanup).format(sql.Identifier(log_table))
             self.pgsql_cur.execute(sql_clean_log)
-
 
     def __count_table_schema(self, table, schema):
         """
@@ -1950,17 +1947,16 @@ class pg_engine(object):
         """
         sql_check = """
             SELECT
-                count(*)
+                COUNT(*)
             FROM
                 pg_tables
             WHERE
                     schemaname=%s
                 AND	tablename=%s;
         """
-        self.pgsql_cur.execute(sql_check, (schema, table ))
+        self.pgsql_cur.execute(sql_check, (schema, table))
         count_table = self.pgsql_cur.fetchone()
         return count_table[0]
-
 
     def write_ddl(self, token, query_data, destination_schema):
         """
@@ -1974,14 +1970,14 @@ class pg_engine(object):
         self.logger.debug("Translated query: %s " % (pg_ddl,))
         log_table = query_data["log_table"]
         insert_vals = (
-                query_data["batch_id"],
-                token["name"],
-                query_data["schema"],
-                query_data["binlog"],
-                query_data["logpos"],
-                pg_ddl
-            )
-        sql_insert=sql.SQL("""
+            query_data["batch_id"],
+            token["name"],
+            query_data["schema"],
+            query_data["binlog"],
+            query_data["logpos"],
+            pg_ddl
+        )
+        sql_insert = sql.SQL("""
             INSERT INTO "sch_chameleon".{}
                 (
                     i_id_batch,
@@ -2007,7 +2003,6 @@ class pg_engine(object):
 
         self.pgsql_cur.execute(sql_insert, insert_vals)
 
-
     def get_tables_disabled(self, format="csv"):
         """
             The method returns a CSV or a python list of tables excluded from the replica.
@@ -2017,9 +2012,9 @@ class pg_engine(object):
             :rtype: text
 
         """
-        if format=='csv':
+        if format == 'csv':
             select_clause = """string_agg(format('%s.%s',(t_mappings).key,v_table_name),',') """
-        elif format=='list':
+        elif format == 'list':
             select_clause = """array_agg(format('%s.%s',(t_mappings).key,v_table_name)) """
         sql_get = """
             SELECT
@@ -2055,7 +2050,7 @@ class pg_engine(object):
             :rtype: text
 
         """
-        sql_log_table="""
+        sql_log_table = """
             UPDATE sch_chameleon.t_sources
             SET
                 v_log_table=ARRAY[v_log_table[2],v_log_table[1]]
@@ -2067,14 +2062,11 @@ class pg_engine(object):
             ;
         """
         self.set_source_id()
-        self.pgsql_cur.execute(sql_log_table, (self.i_id_source, ))
+        self.pgsql_cur.execute(sql_log_table, (self.i_id_source,))
         results = self.pgsql_cur.fetchone()
         log_table = results[0]
         self.logger.debug("New log table : %s " % (log_table,))
         return log_table
-
-
-
 
     def get_batch_data(self):
         """
@@ -2085,11 +2077,11 @@ class pg_engine(object):
             :rtype: psycopg2 tuple
 
         """
-        sql_batch="""
+        sql_batch = """
             WITH t_created AS
                 (
                     SELECT
-                        max(ts_created) AS ts_created
+                        MAX(ts_created) AS ts_created
                     FROM
                         sch_chameleon.t_replica_batch
                     WHERE
@@ -2099,7 +2091,7 @@ class pg_engine(object):
                 )
             UPDATE sch_chameleon.t_replica_batch
             SET
-                b_started=True
+                b_started=TRUE
             FROM
                 t_created
             WHERE
@@ -2114,9 +2106,8 @@ class pg_engine(object):
 
             ;
         """
-        self.pgsql_cur.execute(sql_batch, (self.i_id_source, self.i_id_source,  ))
+        self.pgsql_cur.execute(sql_batch, (self.i_id_source, self.i_id_source,))
         return self.pgsql_cur.fetchall()
-
 
     def drop_replica_schema(self):
         """
@@ -2125,7 +2116,7 @@ class pg_engine(object):
         """
         self.logger.debug("Trying to connect to the destination database.")
         self.connect_db()
-        file_schema = open(self.sql_dir+"drop_schema.sql", 'rb')
+        file_schema = open(self.sql_dir + "drop_schema.sql", 'rb')
         sql_schema = file_schema.read()
         file_schema.close()
         self.pgsql_cur.execute(sql_schema)
@@ -2162,9 +2153,9 @@ class pg_engine(object):
             :return: count from information_schema.schemata
             :rtype: integer
         """
-        sql_check="""
+        sql_check = """
             SELECT
-                count(*)
+                COUNT(*)
             FROM
                 information_schema.schemata
             WHERE
@@ -2198,7 +2189,7 @@ class pg_engine(object):
         else:
             exclude_id = -1
         schema_mappings = json.dumps(self.sources[self.source]["schema_mappings"])
-        if schema_mappings=='null':
+        if schema_mappings == 'null':
             print("Schema mapping cannot be empty. Check your configuration file.")
             sys.exit()
         else:
@@ -2206,7 +2197,7 @@ class pg_engine(object):
                 WITH t_check  AS
                 (
                         SELECT
-                            (jsonb_each_text(jsb_schema_mappings)).value AS dest_schema
+                            (JSONB_EACH_TEXT(jsb_schema_mappings)).value AS dest_schema
                         FROM
                             sch_chameleon.t_sources
                         WHERE
@@ -2215,20 +2206,20 @@ class pg_engine(object):
                         SELECT
                             value AS dest_schema
                         FROM
-                            json_each_text(%s::json)
+                            JSON_EACH_TEXT(%s::json)
                 )
             SELECT
-                count(dest_schema),
+                COUNT(dest_schema),
                 dest_schema
             FROM
                 t_check
             GROUP BY
                 dest_schema
             HAVING
-                count(dest_schema)>1
+                COUNT(dest_schema)>1
             ;
             """
-            self.pgsql_cur.execute(sql_check, (exclude_id, schema_mappings, ))
+            self.pgsql_cur.execute(sql_check, (exclude_id, schema_mappings,))
             check_mappings = self.pgsql_cur.fetchone()
             return check_mappings
 
@@ -2242,13 +2233,13 @@ class pg_engine(object):
         """
         sql_check = """
             SELECT
-                count(*)
+                COUNT(*)
             FROM
                 sch_chameleon.t_sources
             WHERE
                 t_source=%s;
         """
-        self.pgsql_cur.execute(sql_check, (self.source, ))
+        self.pgsql_cur.execute(sql_check, (self.source,))
         num_sources = self.pgsql_cur.fetchone()
         return num_sources[0]
 
@@ -2265,7 +2256,8 @@ class pg_engine(object):
         if num_sources == 0:
             check_mappings = self.check_schema_mappings()
             if check_mappings:
-                self.logger.error("Could not register the source %s. There is a duplicate destination schema in the schema mappings." % self.source)
+                self.logger.error(
+                    "Could not register the source %s. There is a duplicate destination schema in the schema mappings." % self.source)
             else:
                 self.logger.debug("Adding source %s " % self.source)
                 schema_mappings = json.dumps(self.sources[self.source]["schema_mappings"])
@@ -2310,14 +2302,15 @@ class pg_engine(object):
                         WHERE  t_source=%s
                         RETURNING v_log_table
                         ; """
-            self.pgsql_cur.execute(sql_delete, (self.source, ))
+            self.pgsql_cur.execute(sql_delete, (self.source,))
             source_drop = self.pgsql_cur.fetchone()
             for log_table in source_drop[0]:
                 sql_drop = """DROP TABLE sch_chameleon."%s"; """ % (log_table)
                 try:
                     self.pgsql_cur.execute(sql_drop)
                 except:
-                    self.logger.debug("Could not drop the table sch_chameleon.%s you may need to remove it manually." % log_table)
+                    self.logger.debug(
+                        "Could not drop the table sch_chameleon.%s you may need to remove it manually." % log_table)
         else:
             self.logger.debug("There is no source %s registered in the replica catalogue" % self.source)
 
@@ -2331,19 +2324,19 @@ class pg_engine(object):
         self.logger.debug("Collecting schema list for source %s" % self.source)
         sql_get_schema = """
             SELECT
-                (jsonb_each_text(jsb_schema_mappings)).key
+                (JSONB_EACH_TEXT(jsb_schema_mappings)).key
             FROM
                 sch_chameleon.t_sources
             WHERE
                 t_source=%s;
 
         """
-        self.pgsql_cur.execute(sql_get_schema, (self.source, ))
+        self.pgsql_cur.execute(sql_get_schema, (self.source,))
         schema_list = [schema[0] for schema in self.pgsql_cur.fetchall()]
         self.logger.debug("Found origin's replication schemas %s" % ', '.join(schema_list))
         return schema_list
 
-    def __build_create_table_pgsql(self, table_metadata,table_name,  schema, temporary_schema=True):
+    def __build_create_table_pgsql(self, table_metadata, table_name, schema, temporary_schema=True):
         """
             The method builds the create table statement with any enumeration or composite type associated to the table
             using the postgresql's metadata.
@@ -2365,8 +2358,8 @@ class pg_engine(object):
             destination_schema = schema
         ddl_head = 'CREATE TABLE "%s"."%s" (' % (destination_schema, table_name)
         ddl_tail = ");"
-        ddl_enum=[]
-        ddl_composite=[]
+        ddl_enum = []
+        ddl_composite = []
         for column in table_metadata:
             column_name = column["column_name"]
             if column["column_default"]:
@@ -2374,24 +2367,25 @@ class pg_engine(object):
             else:
                 default_value = ''
             if column["not_null"]:
-                col_is_null="NOT NULL"
+                col_is_null = "NOT NULL"
             else:
-                col_is_null="NULL"
+                col_is_null = "NULL"
             column_type = column["type_format"]
             if column_type == "enum":
                 enum_type = '"%s"."enum_%s_%s"' % (destination_schema, table_name[0:20], column["column_name"][0:20])
                 sql_drop_enum = 'DROP TYPE IF EXISTS %s CASCADE;' % enum_type
-                sql_create_enum = 'CREATE TYPE %s AS ENUM (%s);' % ( enum_type,  column["typ_elements"])
+                sql_create_enum = 'CREATE TYPE %s AS ENUM (%s);' % (enum_type, column["typ_elements"])
                 ddl_enum.append(sql_drop_enum)
                 ddl_enum.append(sql_create_enum)
-                column_type=enum_type
+                column_type = enum_type
             if column_type == "composite":
-                composite_type = '"%s"."typ_%s_%s"' % (destination_schema, table_name[0:20], column["column_name"][0:20])
+                composite_type = '"%s"."typ_%s_%s"' % (
+                    destination_schema, table_name[0:20], column["column_name"][0:20])
                 sql_drop_composite = 'DROP TYPE IF EXISTS %s CASCADE;' % composite_type
-                sql_create_composite = 'CREATE TYPE %s AS (%s);' % ( composite_type,  column["typ_elements"])
+                sql_create_composite = 'CREATE TYPE %s AS (%s);' % (composite_type, column["typ_elements"])
                 ddl_composite.append(sql_drop_composite)
                 ddl_composite.append(sql_create_composite)
-                column_type=composite_type
+                column_type = composite_type
             if column["col_serial"]:
                 default_value = ''
                 if column_type == 'bigint':
@@ -2400,15 +2394,13 @@ class pg_engine(object):
                     column_type = 'serial'
                 default_value = ''
             ddl_columns.append('"%s" %s %s %s' % (column_name, column_type, default_value, col_is_null))
-        def_columns=str(',').join(ddl_columns)
+        def_columns = str(',').join(ddl_columns)
         table_ddl["enum"] = ddl_enum
         table_ddl["composite"] = ddl_composite
-        table_ddl["table"] = (ddl_head+def_columns+ddl_tail)
+        table_ddl["table"] = (ddl_head + def_columns + ddl_tail)
         return table_ddl
 
-
-
-    def __build_create_table_mysql(self, table_metadata,table_name,  schema, temporary_schema=True):
+    def __build_create_table_mysql(self, table_metadata, table_name, schema, temporary_schema=True):
         """
             The method builds the create table statement with any enumeration associated using the mysql's metadata.
             The returned value is a dictionary with the optional enumeration's ddl and the create table without indices or primary keys.
@@ -2428,32 +2420,33 @@ class pg_engine(object):
         ddl_head = 'CREATE TABLE "%s"."%s" (' % (destination_schema, table_name)
         ddl_tail = ");"
         ddl_columns = []
-        ddl_enum=[]
+        ddl_enum = []
         table_ddl = {}
         for column in table_metadata:
-            if column["is_nullable"]=="NO":
-                    col_is_null="NOT NULL"
+            if column["is_nullable"] == "NO":
+                col_is_null = "NOT NULL"
             else:
-                col_is_null="NULL"
+                col_is_null = "NULL"
             column_type = self.get_data_type(column, schema, table_name)
             if column_type == "enum":
                 enum_type = '"%s"."enum_%s_%s"' % (destination_schema, table_name[0:20], column["column_name"][0:20])
                 sql_drop_enum = 'DROP TYPE IF EXISTS %s CASCADE;' % enum_type
-                sql_create_enum = 'CREATE TYPE %s AS ENUM %s;' % ( enum_type,  column["enum_list"])
+                sql_create_enum = 'CREATE TYPE %s AS ENUM %s;' % (enum_type, column["enum_list"])
                 ddl_enum.append(sql_drop_enum)
                 ddl_enum.append(sql_create_enum)
-                column_type=enum_type
+                column_type = enum_type
             if column_type == "character varying" or column_type == "character":
-                column_type="%s (%s)" % (column_type, str(column["character_maximum_length"]))
+                column_type = "%s (%s)" % (column_type, str(column["character_maximum_length"]))
             if column_type == 'numeric':
-                column_type="%s (%s,%s)" % (column_type, str(column["numeric_precision"]), str(column["numeric_scale"]))
+                column_type = "%s (%s,%s)" % (
+                    column_type, str(column["numeric_precision"]), str(column["numeric_scale"]))
             if column["extra"] == "auto_increment":
                 column_type = "bigserial"
-            ddl_columns.append(  ' "%s" %s %s   ' %  (column["column_name"], column_type, col_is_null ))
-        def_columns=str(',').join(ddl_columns)
+            ddl_columns.append(' "%s" %s %s   ' % (column["column_name"], column_type, col_is_null))
+        def_columns = str(',').join(ddl_columns)
         table_ddl["enum"] = ddl_enum
         table_ddl["composite"] = []
-        table_ddl["table"] = (ddl_head+def_columns+ddl_tail)
+        table_ddl["table"] = (ddl_head + def_columns + ddl_tail)
         return table_ddl
 
     def build_create_index(self, schema, table, index_data):
@@ -2471,30 +2464,31 @@ class pg_engine(object):
         table_primary = []
 
         for index in index_data:
-                table_timestamp = str(int(time.time()))
-                indx = index["index_name"]
-                self.logger.debug("Generating the DDL for index %s" % (indx))
-                index_columns = ['"%s"' % column for column in index["index_columns"]]
-                non_unique = index["non_unique"]
-                if indx =='PRIMARY':
-                    pkey_name = "pk_%s_%s_%s " % (table[0:10],table_timestamp,  self.idx_sequence)
-                    pkey_def = 'ALTER TABLE "%s"."%s" ADD CONSTRAINT "%s" PRIMARY KEY (%s) ;' % (schema, table, pkey_name, ','.join(index_columns))
-                    idx_ddl[pkey_name] = pkey_def
-                    table_primary = index["index_columns"]
+            table_timestamp = str(int(time.time()))
+            indx = index["index_name"]
+            self.logger.debug("Generating the DDL for index %s" % (indx))
+            index_columns = ['"%s"' % column for column in index["index_columns"]]
+            non_unique = index["non_unique"]
+            if indx == 'PRIMARY':
+                pkey_name = "pk_%s_%s_%s " % (table[0:10], table_timestamp, self.idx_sequence)
+                pkey_def = 'ALTER TABLE "%s"."%s" ADD CONSTRAINT "%s" PRIMARY KEY (%s) ;' % (
+                    schema, table, pkey_name, ','.join(index_columns))
+                idx_ddl[pkey_name] = pkey_def
+                table_primary = index["index_columns"]
+            else:
+                if non_unique == 0:
+                    unique_key = 'UNIQUE'
+                    if table_primary == []:
+                        table_primary = index["index_columns"]
+
                 else:
-                    if non_unique == 0:
-                        unique_key = 'UNIQUE'
-                        if table_primary == []:
-                            table_primary = index["index_columns"]
-
-                    else:
-                        unique_key = ''
-                    index_name='idx_%s_%s_%s_%s' % (indx[0:10], table[0:10], table_timestamp, self.idx_sequence)
-                    idx_def='CREATE %s INDEX "%s" ON "%s"."%s" (%s);' % (unique_key, index_name, schema, table, ','.join(index_columns) )
-                    idx_ddl[index_name] = idx_def
-                self.idx_sequence+=1
+                    unique_key = ''
+                index_name = 'idx_%s_%s_%s_%s' % (indx[0:10], table[0:10], table_timestamp, self.idx_sequence)
+                idx_def = 'CREATE %s INDEX "%s" ON "%s"."%s" (%s);' % (
+                    unique_key, index_name, schema, table, ','.join(index_columns))
+                idx_ddl[index_name] = idx_def
+            self.idx_sequence += 1
         return [table_primary, idx_ddl]
-
 
     def get_log_data(self, log_id):
         """
@@ -2505,7 +2499,7 @@ class pg_engine(object):
         """
         self.connect_db()
         if log_id != "*":
-            filter_by_logid = self.pgsql_cur.mogrify("WHERE log.i_id_log=%s",  (log_id, ))
+            filter_by_logid = self.pgsql_cur.mogrify("WHERE log.i_id_log=%s", (log_id,))
         else:
             filter_by_logid = b""
         sql_log = """
@@ -2546,33 +2540,32 @@ class pg_engine(object):
             source_filter = ""
 
         else:
-            source_filter = (self.pgsql_cur.mogrify(""" WHERE  src.t_source=%s """, (self.source, ))).decode()
+            source_filter = (self.pgsql_cur.mogrify(""" WHERE  src.t_source=%s """, (self.source,))).decode()
             self.set_source_id()
 
             sql_counters = """
                 SELECT
-                    sum(i_replayed) as total_replayed,
-                    sum(i_skipped) as total_skipped,
-                    sum(i_ddl) as total_ddl
+                    SUM(i_replayed) AS total_replayed,
+                    SUM(i_skipped) AS total_skipped,
+                    SUM(i_ddl) AS total_ddl
                 FROM
                     sch_chameleon.t_replica_batch
                 WHERE
                     i_id_source=%s;
 
             """
-            self.pgsql_cur.execute(sql_counters, (self.i_id_source, ))
+            self.pgsql_cur.execute(sql_counters, (self.i_id_source,))
             replica_counters = self.pgsql_cur.fetchone()
-
 
             sql_mappings = """
                 SELECT
-                    (mappings).key as origin_schema,
-                    (mappings).value destination_schema
+                    (mappings).key AS origin_schema,
+                    (mappings).value AS destination_schema
                 FROM
 
                 (
                     SELECT
-                        jsonb_each_text(jsb_schema_mappings) as mappings
+                        JSONB_EACH_TEXT(jsb_schema_mappings) AS mappings
                     FROM
                         sch_chameleon.t_sources
                     WHERE
@@ -2633,14 +2626,10 @@ class pg_engine(object):
             ;
             """
 
-
-            self.pgsql_cur.execute(sql_mappings, (self.source, ))
+            self.pgsql_cur.execute(sql_mappings, (self.source,))
             schema_mappings = self.pgsql_cur.fetchall()
-            self.pgsql_cur.execute(sql_tab_status, (self.source, ))
+            self.pgsql_cur.execute(sql_tab_status, (self.source,))
             table_status = self.pgsql_cur.fetchall()
-
-
-
 
         sql_status = """
             SELECT
@@ -2685,11 +2674,9 @@ class pg_engine(object):
             %s
             ;
 
-        """ % (source_filter, )
-        self.pgsql_cur.execute(sql_status, (self.auto_maintenance, ))
+        """ % (source_filter,)
+        self.pgsql_cur.execute(sql_status, (self.auto_maintenance,))
         configuration_status = self.pgsql_cur.fetchall()
-
-
 
         self.disconnect_db()
         return [configuration_status, schema_mappings, table_status, replica_counters]
@@ -2731,10 +2718,10 @@ class pg_engine(object):
                     ts_last_received=NULL
             ;
         """
-        self.pgsql_cur.execute(sql_replay, (self.i_id_source, ))
-        self.pgsql_cur.execute(sql_receive, (self.i_id_source, ))
+        self.pgsql_cur.execute(sql_replay, (self.i_id_source,))
+        self.pgsql_cur.execute(sql_receive, (self.i_id_source,))
 
-    def  generate_default_statements(self, schema,  table, column, create_column=None):
+    def generate_default_statements(self, schema, table, column, create_column=None):
         """
             The method gets the default value associated with the table and column removing the cast.
             :param schema: The schema name
@@ -2746,7 +2733,7 @@ class pg_engine(object):
         if not create_column:
             create_column = column
 
-        regclass = """ "%s"."%s" """ %(schema, table)
+        regclass = """ "%s"."%s" """ % (schema, table)
         sql_def_val = """
             SELECT
                 (
@@ -2768,21 +2755,23 @@ class pg_engine(object):
             ;
 
         """
-        self.pgsql_cur.execute(sql_def_val, (regclass, column ))
+        self.pgsql_cur.execute(sql_def_val, (regclass, column))
         default_value = self.pgsql_cur.fetchone()
         query_drop_default = b""
         query_add_default = b""
         if default_value[0]:
-            query_drop_default = sql.SQL(" ALTER TABLE {}.{} ALTER COLUMN {} DROP DEFAULT;").format(sql.Identifier(schema), sql.Identifier(table), sql.Identifier(column))
-            query_add_default = sql.SQL(" ALTER TABLE  {}.{} ALTER COLUMN {} SET DEFAULT %s;" % (default_value[0])).format(sql.Identifier(schema), sql.Identifier(table), sql.Identifier(column))
+            query_drop_default = sql.SQL(" ALTER TABLE {}.{} ALTER COLUMN {} DROP DEFAULT;").format(
+                sql.Identifier(schema), sql.Identifier(table), sql.Identifier(column))
+            query_add_default = sql.SQL(
+                " ALTER TABLE  {}.{} ALTER COLUMN {} SET DEFAULT %s;" % (default_value[0])).format(
+                sql.Identifier(schema), sql.Identifier(table), sql.Identifier(column))
 
             query_drop_default = self.pgsql_cur.mogrify(query_drop_default)
-            query_add_default = self.pgsql_cur.mogrify(query_add_default )
+            query_add_default = self.pgsql_cur.mogrify(query_add_default)
 
-        return {'drop':query_drop_default.decode(), 'create':query_add_default.decode()}
+        return {'drop': query_drop_default.decode(), 'create': query_add_default.decode()}
 
-
-    def get_data_type(self, column, schema,  table):
+    def get_data_type(self, column, schema, table):
         """
             The method determines whether the specified type has to be overridden or not.
 
@@ -2818,8 +2807,8 @@ class pg_engine(object):
             app_name = "[pg_chameleon] - source: %s, action: %s" % (self.source, action)
         else:
             app_name = "[pg_chameleon] -  action: %s" % (action)
-        sql_app_name="""SET application_name=%s; """
-        self.pgsql_cur.execute(sql_app_name, (app_name , ))
+        sql_app_name = """SET application_name=%s; """
+        self.pgsql_cur.execute(sql_app_name, (app_name,))
 
     def write_batch(self, group_insert):
         """
@@ -2833,34 +2822,34 @@ class pg_engine(object):
 
             :param group_insert: the event data built in mysql_engine
         """
-        csv_file=io.StringIO()
+        csv_file = io.StringIO()
         self.set_application_name("writing batch")
-        insert_list=[]
+        insert_list = []
         for row_data in group_insert:
-            global_data=row_data["global_data"]
-            event_after=row_data["event_after"]
-            event_before=row_data["event_before"]
-            log_table=global_data["log_table"]
-            insert_list.append(self.pgsql_cur.mogrify("%s,%s,%s,%s,%s,%s,%s,%s,%s" ,  (
-                        global_data["batch_id"],
-                        global_data["table"],
-                        global_data["schema"],
-                        global_data["action"],
-                        global_data["binlog"],
-                        global_data["logpos"],
-                        json.dumps(event_after, cls=pg_encoder),
-                        json.dumps(event_before, cls=pg_encoder),
-                        global_data["event_time"],
+            global_data = row_data["global_data"]
+            event_after = row_data["event_after"]
+            event_before = row_data["event_before"]
+            log_table = global_data["log_table"]
+            insert_list.append(self.pgsql_cur.mogrify("%s,%s,%s,%s,%s,%s,%s,%s,%s", (
+                global_data["batch_id"],
+                global_data["table"],
+                global_data["schema"],
+                global_data["action"],
+                global_data["binlog"],
+                global_data["logpos"],
+                json.dumps(event_after, cls=pg_encoder),
+                json.dumps(event_before, cls=pg_encoder),
+                global_data["event_time"],
 
-                    )
-                )
             )
+                                                      )
+                               )
 
-        csv_data=b"\n".join(insert_list ).decode()
+        csv_data = b"\n".join(insert_list).decode()
         csv_file.write(csv_data)
         csv_file.seek(0)
         try:
-            sql_copy=sql.SQL("""
+            sql_copy = sql.SQL("""
                 COPY "sch_chameleon".{}
                     (
                         i_id_batch,
@@ -2881,15 +2870,14 @@ class pg_engine(object):
                     ESCAPE ''''
                 ;
             """).format(sql.Identifier(log_table))
-            self.pgsql_cur.copy_expert(sql_copy,csv_file)
+            self.pgsql_cur.copy_expert(sql_copy, csv_file)
         except psycopg2.Error as e:
             self.logger.error("SQLCODE: %s SQLERROR: %s" % (e.pgcode, e.pgerror))
             self.logger.error("fallback to inserts")
             self.insert_batch(group_insert)
         self.set_application_name("idle")
 
-
-    def insert_batch(self,group_insert):
+    def insert_batch(self, group_insert):
         """
             Fallback method for the batch insert. Each row event is processed
             individually and any problematic row is discarded into the table t_discarded_rows.
@@ -2901,11 +2889,11 @@ class pg_engine(object):
         self.logger.debug("starting insert loop")
         for row_data in group_insert:
             global_data = row_data["global_data"]
-            event_after= row_data["event_after"]
-            event_before= row_data["event_before"]
+            event_after = row_data["event_after"]
+            event_before = row_data["event_before"]
             log_table = global_data["log_table"]
             event_time = global_data["event_time"]
-            sql_insert=sql.SQL("""
+            sql_insert = sql.SQL("""
                 INSERT INTO sch_chameleon.{}
                     (
                         i_id_batch,
@@ -2933,18 +2921,18 @@ class pg_engine(object):
                 ;
             """).format(sql.Identifier(log_table))
             try:
-                self.pgsql_cur.execute(sql_insert,(
-                        global_data["batch_id"],
-                        global_data["table"],
-                        global_data["schema"],
-                        global_data["action"],
-                        global_data["binlog"],
-                        global_data["logpos"],
-                        json.dumps(event_after, cls=pg_encoder),
-                        json.dumps(event_before, cls=pg_encoder),
-                        event_time
-                    )
+                self.pgsql_cur.execute(sql_insert, (
+                    global_data["batch_id"],
+                    global_data["table"],
+                    global_data["schema"],
+                    global_data["action"],
+                    global_data["binlog"],
+                    global_data["logpos"],
+                    json.dumps(event_after, cls=pg_encoder),
+                    json.dumps(event_before, cls=pg_encoder),
+                    event_time
                 )
+                                       )
             except psycopg2.Error as e:
                 if e.pgcode == "22P05":
                     self.logger.warning("%s - %s. Trying to cleanup the row" % (e.pgcode, e.pgerror))
@@ -2956,21 +2944,21 @@ class pg_engine(object):
                         if value:
                             event_before[key] = str(value).replace("\x00", "")
 
-                    #event_after = {key: str(value).replace("\x00", "") for key, value in event_after.items() if value}
-                    #event_before = {key: str(value).replace("\x00", "") for key, value in event_before.items() if value}
+                    # event_after = {key: str(value).replace("\x00", "") for key, value in event_after.items() if value}
+                    # event_before = {key: str(value).replace("\x00", "") for key, value in event_before.items() if value}
                     try:
-                        self.pgsql_cur.execute(sql_insert,(
-                                global_data["batch_id"],
-                                global_data["table"],
-                                global_data["schema"],
-                                global_data["action"],
-                                global_data["binlog"],
-                                global_data["logpos"],
-                                json.dumps(event_after, cls=pg_encoder),
-                                json.dumps(event_before, cls=pg_encoder),
-                                event_time
-                            )
+                        self.pgsql_cur.execute(sql_insert, (
+                            global_data["batch_id"],
+                            global_data["table"],
+                            global_data["schema"],
+                            global_data["action"],
+                            global_data["binlog"],
+                            global_data["logpos"],
+                            json.dumps(event_after, cls=pg_encoder),
+                            json.dumps(event_before, cls=pg_encoder),
+                            event_time
                         )
+                                               )
                     except:
                         self.logger.error("Cleanup unsuccessful. Saving the discarded row")
                         self.save_discarded_row(row_data)
@@ -2982,7 +2970,7 @@ class pg_engine(object):
                 self.logger.error("Error when storing event data. Saving the discarded row")
                 self.save_discarded_row(row_data)
 
-    def save_discarded_row(self,row_data):
+    def save_discarded_row(self, row_data):
         """
             The method saves the discarded row in the table t_discarded_row along with the id_batch.
             The row is encoded in base64 as the t_row_data is a text field.
@@ -2992,11 +2980,11 @@ class pg_engine(object):
         """
         global_data = row_data["global_data"]
         schema = global_data["schema"]
-        table  = global_data["table"]
+        table = global_data["table"]
         batch_id = global_data["batch_id"]
-        str_data = '%s' %(row_data, )
+        str_data = '%s' % (row_data,)
         hex_row = binascii.hexlify(str_data.encode())
-        sql_save="""
+        sql_save = """
             INSERT INTO sch_chameleon.t_discarded_rows
                 (
                     i_id_batch,
@@ -3012,10 +3000,9 @@ class pg_engine(object):
                     %s
                 );
         """
-        self.pgsql_cur.execute(sql_save,(batch_id, schema, table,hex_row))
+        self.pgsql_cur.execute(sql_save, (batch_id, schema, table, hex_row))
 
-
-    def create_table(self,  table_metadata,table_name,  schema, metadata_type):
+    def create_table(self, table_metadata, table_name, schema, metadata_type):
         """
             Executes the create table returned by __build_create_table (mysql or pgsql) on the destination_schema.
 
@@ -3025,9 +3012,9 @@ class pg_engine(object):
             :param metadata_type: the metadata type, currently supported mysql and pgsql
         """
         if metadata_type == 'mysql':
-            table_ddl = self.__build_create_table_mysql( table_metadata,table_name,  schema)
+            table_ddl = self.__build_create_table_mysql(table_metadata, table_name, schema)
         elif metadata_type == 'pgsql':
-            table_ddl = self.__build_create_table_pgsql( table_metadata,table_name,  schema)
+            table_ddl = self.__build_create_table_pgsql(table_metadata, table_name, schema)
         enum_ddl = table_ddl["enum"]
         composite_ddl = table_ddl["composite"]
         table_ddl = table_ddl["table"]
@@ -3057,7 +3044,6 @@ class pg_engine(object):
         new_schema_mappings = self.sources[self.source]["schema_mappings"]
         old_schema_mappings = self.get_schema_mappings()
 
-
         if new_schema_mappings != old_schema_mappings:
             duplicate_mappings = self.check_schema_mappings(True)
             if not duplicate_mappings:
@@ -3070,7 +3056,9 @@ class pg_engine(object):
                     except KeyError:
                         new_mapping = None
                     if not new_mapping:
-                        self.logger.debug("The mapping for schema %s has ben removed. Deleting the reference from the replica catalogue." % (schema))
+                        self.logger.debug(
+                            "The mapping for schema %s has ben removed. Deleting the reference from the replica catalogue." % (
+                                schema))
                         sql_delete = """
                             DELETE FROM sch_chameleon.t_replica_tables
                             WHERE
@@ -3078,9 +3066,10 @@ class pg_engine(object):
                                 AND	v_schema_name=%s
                             ;
                         """
-                        self.pgsql_cur.execute(sql_delete, (self.i_id_source,old_mapping ))
+                        self.pgsql_cur.execute(sql_delete, (self.i_id_source, old_mapping))
                     elif old_mapping != new_mapping:
-                        self.logger.debug("Updating mapping for schema %s. Old: %s. New: %s" % (schema, old_mapping, new_mapping))
+                        self.logger.debug(
+                            "Updating mapping for schema %s. Old: %s. New: %s" % (schema, old_mapping, new_mapping))
                         sql_tables = """
                             UPDATE sch_chameleon.t_replica_tables
                                 SET v_schema_name=%s
@@ -3089,10 +3078,11 @@ class pg_engine(object):
                                 AND	v_schema_name=%s
                             ;
                         """
-                        self.pgsql_cur.execute(sql_tables, (new_mapping, self.i_id_source,old_mapping ))
-                        sql_alter_schema = sql.SQL("ALTER SCHEMA {} RENAME TO {};").format(sql.Identifier(old_mapping), sql.Identifier(new_mapping))
+                        self.pgsql_cur.execute(sql_tables, (new_mapping, self.i_id_source, old_mapping))
+                        sql_alter_schema = sql.SQL("ALTER SCHEMA {} RENAME TO {};").format(sql.Identifier(old_mapping),
+                                                                                           sql.Identifier(new_mapping))
                         self.pgsql_cur.execute(sql_alter_schema)
-                sql_source="""
+                sql_source = """
                     UPDATE sch_chameleon.t_sources
                         SET
                             jsb_schema_mappings=%s
@@ -3106,10 +3096,13 @@ class pg_engine(object):
 
                 self.set_autocommit_db(True)
             else:
-                self.logger.error("Could update the schema mappings for source %s. There is a duplicate destination schema in other sources. The offending schema is %s." % (self.source, duplicate_mappings[1]))
+                self.logger.error(
+                    "Could update the schema mappings for source %s. There is a duplicate destination schema in other sources. The offending schema is %s." % (
+                        self.source, duplicate_mappings[1]))
         else:
-            self.logger.debug("The configuration file and catalogue mappings for source %s are the same. Not updating." % self.source)
-        #print (self.i_id_source)
+            self.logger.debug(
+                "The configuration file and catalogue mappings for source %s are the same. Not updating." % self.source)
+        # print (self.i_id_source)
 
         self.disconnect_db()
 
@@ -3133,7 +3126,7 @@ class pg_engine(object):
                 t_source=%s;
 
         """
-        self.pgsql_cur.execute(sql_get_schema, (self.source, ))
+        self.pgsql_cur.execute(sql_get_schema, (self.source,))
         schema_mappings = self.pgsql_cur.fetchone()
         return schema_mappings[0]
 
@@ -3154,9 +3147,8 @@ class pg_engine(object):
             RETURNING i_id_source
                 ;
             """
-        self.pgsql_cur.execute(sql_source, (source_status, self.source, ))
+        self.pgsql_cur.execute(sql_source, (source_status, self.source,))
         source_data = self.pgsql_cur.fetchone()
-
 
         try:
             self.i_id_source = source_data[0]
@@ -3176,14 +3168,13 @@ class pg_engine(object):
                 t_source=%s
             ;
             """
-        self.pgsql_cur.execute(sql_source, ( self.source, ))
+        self.pgsql_cur.execute(sql_source, (self.source,))
         source_data = self.pgsql_cur.fetchone()
         try:
             self.i_id_source = source_data[0]
         except:
             print("Source %s is not registered." % self.source)
             sys.exit()
-
 
     def clean_batch_data(self):
         """
@@ -3194,8 +3185,7 @@ class pg_engine(object):
         sql_cleanup = """
             DELETE FROM sch_chameleon.t_replica_batch WHERE i_id_source=%s;
         """
-        self.pgsql_cur.execute(sql_cleanup, (self.i_id_source, ))
-
+        self.pgsql_cur.execute(sql_cleanup, (self.i_id_source,))
 
     def get_replica_status(self):
         """
@@ -3212,7 +3202,7 @@ class pg_engine(object):
                 i_id_source=%s
             ;
         """
-        self.pgsql_cur.execute(sql_status, (self.i_id_source, ))
+        self.pgsql_cur.execute(sql_status, (self.i_id_source,))
         replica_status = self.pgsql_cur.fetchone()
         return replica_status[0]
 
@@ -3233,10 +3223,9 @@ class pg_engine(object):
                 i_id_source=%s
             ;
         """
-        self.pgsql_cur.execute(sql_log_tables, (self.i_id_source, ))
+        self.pgsql_cur.execute(sql_log_tables, (self.i_id_source,))
         log_tables = self.pgsql_cur.fetchall()
         for log_table in log_tables:
-
             sql_cleanup = sql.SQL("""
                 DELETE FROM sch_chameleon.{}
                 WHERE
@@ -3252,8 +3241,7 @@ class pg_engine(object):
                 ;
             """).format(sql.Identifier(log_table[0]))
             self.logger.debug("Cleaning table %s" % log_table[0])
-            self.pgsql_cur.execute(sql_cleanup, (self.i_id_source, ))
-
+            self.pgsql_cur.execute(sql_cleanup, (self.i_id_source,))
 
     def check_auto_maintenance(self):
         """
@@ -3269,13 +3257,13 @@ class pg_engine(object):
         self.set_source_id()
         sql_maintenance = """
             SELECT
-                now()-coalesce(ts_last_maintenance,'1970-01-01 00:00:00'::timestamp)>%s::interval
+                NOW()-COALESCE(ts_last_maintenance,'1970-01-01 00:00:00'::timestamp)>%s::interval
             FROM
                 sch_chameleon.t_sources
             WHERE
                 i_id_source=%s;
         """
-        self.pgsql_cur.execute(sql_maintenance, (self.auto_maintenance, self.i_id_source, ))
+        self.pgsql_cur.execute(sql_maintenance, (self.auto_maintenance, self.i_id_source,))
         maintenance = self.pgsql_cur.fetchone()
         return maintenance[0]
 
@@ -3333,12 +3321,12 @@ class pg_engine(object):
             ;
 
         """
-        self.pgsql_cur.execute(sql_check_consistent, (self.i_id_source, self.i_id_source, ))
-        self.logger.debug("Checking consistent status for source: %s" %(self.source, ) )
+        self.pgsql_cur.execute(sql_check_consistent, (self.i_id_source, self.i_id_source,))
+        self.logger.debug("Checking consistent status for source: %s" % (self.source,))
         source_consistent = self.pgsql_cur.fetchone()
         if source_consistent:
             if source_consistent[0]:
-                self.logger.info("The source: %s reached the consistent status" %(self.source, ) )
+                self.logger.info("The source: %s reached the consistent status" % (self.source,))
                 sql_set_source_consistent = """
                     UPDATE sch_chameleon.t_sources
                         SET
@@ -3358,16 +3346,16 @@ class pg_engine(object):
                         i_id_source=%s
                 ;
                 """
-                self.pgsql_cur.execute(sql_set_source_consistent, (self.i_id_source,  ))
-                self.pgsql_cur.execute(sql_set_tables_consistent, (self.i_id_source,  ))
+                self.pgsql_cur.execute(sql_set_source_consistent, (self.i_id_source,))
+                self.pgsql_cur.execute(sql_set_tables_consistent, (self.i_id_source,))
                 if self.keep_existing_schema:
                     self.__create_foreign_keys()
                     self.__validate_fkeys()
                     self.__cleanup_idx_keys()
             else:
-                self.logger.debug("The source: %s is not consistent " %(self.source, ) )
+                self.logger.debug("The source: %s is not consistent " % (self.source,))
         else:
-            self.logger.debug("The source: %s is consistent" %(self.source, ) )
+            self.logger.debug("The source: %s is consistent" % (self.source,))
 
     def __cleanup_idx_keys(self):
         """
@@ -3418,9 +3406,9 @@ class pg_engine(object):
                 )
             ;
         """
-        self.pgsql_cur.execute(sql_clean_idx, (self.i_id_source, ))
-        self.pgsql_cur.execute(sql_clean_pkeys, (self.i_id_source, ))
-        self.pgsql_cur.execute(sql_clean_fkeys, (self.i_id_source, ))
+        self.pgsql_cur.execute(sql_clean_idx, (self.i_id_source,))
+        self.pgsql_cur.execute(sql_clean_pkeys, (self.i_id_source,))
+        self.pgsql_cur.execute(sql_clean_fkeys, (self.i_id_source,))
 
     def set_source_highwatermark(self, master_status, consistent):
         """
@@ -3432,7 +3420,7 @@ class pg_engine(object):
         master_data = master_status[0]
         binlog_name = master_data["File"]
         binlog_position = master_data["Position"]
-        sql_set  = """
+        sql_set = """
             UPDATE sch_chameleon.t_sources
                 SET
                     b_consistent=%s,
@@ -3443,9 +3431,8 @@ class pg_engine(object):
             ;
 
         """
-        self.pgsql_cur.execute(sql_set, (consistent, binlog_name, binlog_position, self.i_id_source, ))
-        self.logger.info("Set high watermark for source: %s" %(self.source, ) )
-
+        self.pgsql_cur.execute(sql_set, (consistent, binlog_name, binlog_position, self.i_id_source,))
+        self.logger.info("Set high watermark for source: %s" % (self.source,))
 
     def save_master_status(self, master_status):
         """
@@ -3503,21 +3490,23 @@ class pg_engine(object):
         """
 
         try:
-            self.pgsql_cur.execute(sql_master, (self.i_id_source, binlog_name, binlog_position, executed_gtid_set, log_table))
-            results =self.pgsql_cur.fetchone()
-            next_batch_id=results[0]
-            self.pgsql_cur.execute(sql_last_update, (event_time, self.i_id_source, ))
+            self.pgsql_cur.execute(sql_master,
+                                   (self.i_id_source, binlog_name, binlog_position, executed_gtid_set, log_table))
+            results = self.pgsql_cur.fetchone()
+            next_batch_id = results[0]
+            self.pgsql_cur.execute(sql_last_update, (event_time, self.i_id_source,))
             results = self.pgsql_cur.fetchone()
             db_event_time = results[0]
-            self.logger.info("Saved master data for source: %s" %(self.source, ) )
-            self.logger.debug("Binlog file: %s" % (binlog_name, ))
-            self.logger.debug("Binlog position:%s" % (binlog_position, ))
-            self.logger.debug("Last event: %s" % (db_event_time, ))
-            self.logger.debug("Next log table name: %s" % ( log_table, ))
+            self.logger.info("Saved master data for source: %s" % (self.source,))
+            self.logger.debug("Binlog file: %s" % (binlog_name,))
+            self.logger.debug("Binlog position:%s" % (binlog_position,))
+            self.logger.debug("Last event: %s" % (db_event_time,))
+            self.logger.debug("Next log table name: %s" % (log_table,))
 
         except psycopg2.Error as e:
-                    self.logger.error("SQLCODE: %s SQLERROR: %s" % (e.pgcode, e.pgerror))
-                    self.logger.error(self.pgsql_cur.mogrify(sql_master, (self.i_id_source, binlog_name, binlog_position, executed_gtid_set, log_table)))
+            self.logger.error("SQLCODE: %s SQLERROR: %s" % (e.pgcode, e.pgerror))
+            self.logger.error(self.pgsql_cur.mogrify(sql_master, (
+                self.i_id_source, binlog_name, binlog_position, executed_gtid_set, log_table)))
 
         return next_batch_id
 
@@ -3530,7 +3519,7 @@ class pg_engine(object):
         sql_reindex = sql.SQL("REINDEX TABLE {}.{} ;").format(sql.Identifier(schema), sql.Identifier(table))
         self.pgsql_cur.execute(sql_reindex)
 
-    def cleanup_idx_cons(self,schema,table):
+    def cleanup_idx_cons(self, schema, table):
         """
             The method cleansup the constraint and indices for the given table using the statements collected in
             collect_idx_cons.
@@ -3570,26 +3559,26 @@ class pg_engine(object):
                 AND v_table_name=%s
             ;
             """
-        self.pgsql_cur.execute(sql_get_fk_drop,(schema,table,))
-        fk_drop=self.pgsql_cur.fetchall()
-        self.pgsql_cur.execute(sql_get_idx_drop,(schema,table,))
-        idx_drop=self.pgsql_cur.fetchall()
-        self.pgsql_cur.execute(sql_get_pk_drop,(schema,table,))
-        pk_drop=self.pgsql_cur.fetchall()
+        self.pgsql_cur.execute(sql_get_fk_drop, (schema, table,))
+        fk_drop = self.pgsql_cur.fetchall()
+        self.pgsql_cur.execute(sql_get_idx_drop, (schema, table,))
+        idx_drop = self.pgsql_cur.fetchall()
+        self.pgsql_cur.execute(sql_get_pk_drop, (schema, table,))
+        pk_drop = self.pgsql_cur.fetchall()
         for fk in fk_drop:
-            self.logger.info("Dropping the foreign key {}".format(fk[0],))
+            self.logger.info("Dropping the foreign key {}".format(fk[0], ))
             try:
                 self.pgsql_cur.execute(fk[1])
             except:
                 pass
         for idx in idx_drop:
-            self.logger.info("Dropping the index {}".format(idx[0],))
+            self.logger.info("Dropping the index {}".format(idx[0], ))
             try:
                 self.pgsql_cur.execute(idx[1])
             except:
                 raise
         for pk in pk_drop:
-            self.logger.info("Dropping the primary key {}".format(pk[0],))
+            self.logger.info("Dropping the primary key {}".format(pk[0], ))
             try:
                 self.pgsql_cur.execute(pk[1])
             except:
@@ -3610,16 +3599,15 @@ class pg_engine(object):
             ;
             """
         self.pgsql_cur.execute(sql_get_fk_create)
-        fk_create=self.pgsql_cur.fetchall()
+        fk_create = self.pgsql_cur.fetchall()
         for fk in fk_create:
-            self.logger.info("Creating the foreign key {}".format(fk[0],))
+            self.logger.info("Creating the foreign key {}".format(fk[0], ))
             try:
                 self.pgsql_cur.execute(fk[1])
             except:
                 pass
 
-
-    def create_idx_cons(self,schema,table):
+    def create_idx_cons(self, schema, table):
         """
             The method creates the constraint and indices for the given table using the statements collected in
             collect_idx_cons. The foreign keys are not created at this stage as they may be left inconsistent
@@ -3652,22 +3640,20 @@ class pg_engine(object):
                 AND v_table_name=%s
            ;
             """
-        self.pgsql_cur.execute(sql_get_idx_create,(schema,table,))
-        idx_create=self.pgsql_cur.fetchall()
-        self.pgsql_cur.execute(sql_get_pk_create,(schema,table,))
-        pk_create=self.pgsql_cur.fetchall()
+        self.pgsql_cur.execute(sql_get_idx_create, (schema, table,))
+        idx_create = self.pgsql_cur.fetchall()
+        self.pgsql_cur.execute(sql_get_pk_create, (schema, table,))
+        pk_create = self.pgsql_cur.fetchall()
 
         for pk in pk_create:
-            self.logger.info("Creating the primary key {}".format(pk[0],))
+            self.logger.info("Creating the primary key {}".format(pk[0], ))
             self.pgsql_cur.execute(pk[1])
 
         for idx in idx_create:
-            self.logger.info("Creating the index {}".format(idx[0],))
+            self.logger.info("Creating the index {}".format(idx[0], ))
             self.pgsql_cur.execute(idx[1])
 
-
-
-    def collect_idx_cons(self,schema,table):
+    def collect_idx_cons(self, schema, table):
         """
             The method collects indices and primary keys for the given table from the views v_idx_pkeys,v_fkeys.
             :param schema: the table's schema
@@ -3788,13 +3774,13 @@ class pg_engine(object):
             ;
         """
         self.logger.info("Collecting indices for the table %s.%s" % (schema, table,))
-        self.pgsql_cur.execute(sql_index,(schema,table,))
+        self.pgsql_cur.execute(sql_index, (schema, table,))
         self.logger.info("Collecting the primary key for the table %s.%s" % (schema, table,))
-        self.pgsql_cur.execute(sql_pkey,(schema,table,))
+        self.pgsql_cur.execute(sql_pkey, (schema, table,))
         self.logger.info("Collecting unique constraints for the table %s.%s" % (schema, table,))
-        self.pgsql_cur.execute(sql_ukey,(schema,table,))
+        self.pgsql_cur.execute(sql_ukey, (schema, table,))
         self.logger.info("Collecting foreign keys for the table %s.%s" % (schema, table,))
-        self.pgsql_cur.execute(sql_fkeys,(schema,table,schema,table,schema,table,))
+        self.pgsql_cur.execute(sql_fkeys, (schema, table, schema, table, schema, table,))
 
     def __validate_fkeys(self):
         """
@@ -3823,7 +3809,7 @@ class pg_engine(object):
             ;
         """
         self.pgsql_cur.execute(sql_get_validate)
-        fk_validate=self.pgsql_cur.fetchall()
+        fk_validate = self.pgsql_cur.fetchall()
         for fk in fk_validate:
             self.pgsql_cur.execute(fk[0])
 
@@ -3859,7 +3845,6 @@ class pg_engine(object):
         else:
             binlog_file = None
             binlog_pos = None
-
 
         if len(table_pkey) > 0:
             sql_insert = """
@@ -3897,12 +3882,11 @@ class pg_engine(object):
                 table_pkey,
                 binlog_file,
                 binlog_pos
-                )
             )
+                                   )
         else:
             self.logger.warning("Missing primary key. The table %s.%s will not be replicated." % (schema, table,))
-            self.unregister_table(schema,  table)
-
+            self.unregister_table(schema, table)
 
     def copy_data(self, csv_file, schema, table, column_list):
         """
@@ -3916,11 +3900,13 @@ class pg_engine(object):
             :param table: the table name used in the COPY FROM command
             :param column_list: A string with the list of columns to use in the COPY FROM command already quoted and comma separated
         """
-        sql_copy='COPY "%s"."%s" (%s) FROM STDIN WITH NULL \'NULL\' CSV QUOTE \'"\' DELIMITER \',\' ESCAPE \'"\' ; ' % (schema, table, column_list)
-        self.logger.debug("Copying data to PG %s schema %s table %s columns %s" % (csv_file, schema, table, column_list))
-        self.pgsql_cur.copy_expert(sql_copy,csv_file)
+        sql_copy = 'COPY "%s"."%s" (%s) FROM STDIN WITH NULL \'NULL\' CSV QUOTE \'"\' DELIMITER \',\' ESCAPE \'"\' ; ' % (
+            schema, table, column_list)
+        self.logger.debug(
+            "Copying data to PG %s schema %s table %s columns %s" % (csv_file, schema, table, column_list))
+        self.pgsql_cur.copy_expert(sql_copy, csv_file)
 
-    def insert_data(self, schema, table, insert_data , column_list):
+    def insert_data(self, schema, table, insert_data, column_list):
         """
             The method is a fallback procedure for when the copy method fails.
             The procedure performs a row by row insert, very slow but capable to skip the rows with problematic data (e.g. encoding issues).
@@ -3931,19 +3917,19 @@ class pg_engine(object):
             :param column_list: the list of column names quoted  for the inserts
         """
         sample_row = insert_data[0]
-        column_marker=','.join(['%s' for column in sample_row])
+        column_marker = ','.join(['%s' for column in sample_row])
 
-        sql_head='INSERT INTO "%s"."%s"(%s) VALUES (%s);' % (schema, table, column_list, column_marker)
+        sql_head = 'INSERT INTO "%s"."%s"(%s) VALUES (%s);' % (schema, table, column_list, column_marker)
         for data_row in insert_data:
             try:
-                self.pgsql_cur.execute(sql_head,data_row)
+                self.pgsql_cur.execute(sql_head, data_row)
             except psycopg2.Error as e:
-                    self.logger.error("SQLCODE: %s SQLERROR: %s" % (e.pgcode, e.pgerror))
-                    self.logger.error(self.pgsql_cur.mogrify(sql_head,data_row))
+                self.logger.error("SQLCODE: %s SQLERROR: %s" % (e.pgcode, e.pgerror))
+                self.logger.error(self.pgsql_cur.mogrify(sql_head, data_row))
             except ValueError:
                 try:
                     self.logger.warning("character mismatch when inserting the data, trying to cleanup the row data")
-                    self.logger.warning(self.pgsql_cur.mogrify(sql_head,data_row))
+                    self.logger.warning(self.pgsql_cur.mogrify(sql_head, data_row))
                 except:
                     pass
                 cleanup_data_row = []
@@ -3954,7 +3940,7 @@ class pg_engine(object):
                         cleanup_data_row.append(item)
                 data_row = cleanup_data_row
                 try:
-                    self.pgsql_cur.execute(sql_head,data_row)
+                    self.pgsql_cur.execute(sql_head, data_row)
                 except:
                     self.logger.error("error when inserting the row, skipping the row")
 
@@ -3963,7 +3949,7 @@ class pg_engine(object):
                 self.logger.error("unexpected error when processing the row")
                 self.logger.error(" - > Table: %s.%s" % (schema, table))
 
-    def get_existing_pkey(self,schema,table):
+    def get_existing_pkey(self, schema, table):
         """
             The method gets the primary key of an existing table and returns the field(s)
             composing the PKEY as a list.
@@ -3999,7 +3985,7 @@ class pg_engine(object):
                 AND con.conkey=att.attnum
             ;
         """
-        self.pgsql_cur.execute(sql_get_pkey,(schema,table))
+        self.pgsql_cur.execute(sql_get_pkey, (schema, table))
         pkey_col = self.pgsql_cur.fetchone()
         return pkey_col[0]
 
@@ -4022,35 +4008,35 @@ class pg_engine(object):
             v['column_name']: v for v in table_metadata
         }
         for index in index_data:
-                table_timestamp = str(int(time.time()))
-                indx = index["index_name"]
-                self.logger.debug("Building DDL for index %s" % (indx))
-                idx_col = [column.strip() for column in index["index_columns"].split(',')]
-                index_columns = ['"%s"' % column.strip() for column in idx_col]
-                non_unique = index["non_unique"]
-                if indx =='PRIMARY':
-                    pkey_name = "pk_%s" % (table)
-                    pkey_def = 'ALTER TABLE "%s"."%s" ADD PRIMARY KEY (%s) ;' % (schema, table,  ','.join(index_columns))
-                    idx_ddl[pkey_name] = pkey_def
-                    table_primary = idx_col
+            table_timestamp = str(int(time.time()))
+            indx = index["index_name"]
+            self.logger.debug("Building DDL for index %s" % (indx))
+            idx_col = [column.strip() for column in index["index_columns"].split(',')]
+            index_columns = ['"%s"' % column.strip() for column in idx_col]
+            non_unique = index["non_unique"]
+            if indx == 'PRIMARY':
+                pkey_name = "pk_%s" % (table)
+                pkey_def = 'ALTER TABLE "%s"."%s" ADD PRIMARY KEY (%s) ;' % (schema, table, ','.join(index_columns))
+                idx_ddl[pkey_name] = pkey_def
+                table_primary = idx_col
+            else:
+                if non_unique == 0:
+                    unique_key = 'UNIQUE'
+                    if table_primary == []:
+                        table_primary = idx_col
                 else:
-                    if non_unique == 0:
-                        unique_key = 'UNIQUE'
-                        if table_primary == []:
-                            table_primary = idx_col
-                    else:
-                        unique_key = ''
-                    index_name='idx_%s_%s_%s_%s' % (indx[0:10], table[0:10], table_timestamp, self.idx_sequence)
+                    unique_key = ''
+                index_name = 'idx_%s_%s_%s_%s' % (indx[0:10], table[0:10], table_timestamp, self.idx_sequence)
 
-                    index_definition = "(%s)" % (','.join(index_columns),)
-                    if len(idx_col) == 1 and idx_col[0] in columns_metadata:
-                        column_metadata = columns_metadata[idx_col[0]]
-                        if column_metadata['data_type'] == 'longtext':
-                            index_definition = "USING GIN (to_tsvector('english', %s))" % (idx_col[0],)
+                index_definition = "(%s)" % (','.join(index_columns),)
+                if len(idx_col) == 1 and idx_col[0] in columns_metadata:
+                    column_metadata = columns_metadata[idx_col[0]]
+                    if column_metadata['data_type'] == 'longtext':
+                        index_definition = "USING GIN (to_tsvector('english', %s))" % (idx_col[0],)
 
-                    idx_def='CREATE %s INDEX "%s" ON "%s"."%s" (%s);' % (unique_key, indx, schema, table, index_definition)
-                    idx_ddl[indx] = idx_def
-                self.idx_sequence+=1
+                idx_def = 'CREATE %s INDEX "%s" ON "%s"."%s" %s;' % (unique_key, indx, schema, table, index_definition)
+                idx_ddl[indx] = idx_def
+            self.idx_sequence += 1
 
         for index in idx_ddl:
             self.logger.info("Building index %s on %s.%s" % (index, schema, table))
@@ -4069,9 +4055,12 @@ class pg_engine(object):
             schema_loading = self.schema_loading[schema]["loading"]
             schema_destination = self.schema_loading[schema]["destination"]
             schema_temporary = "_rename_%s" % self.schema_loading[schema]["destination"]
-            sql_dest_to_tmp = sql.SQL("ALTER SCHEMA {} RENAME TO {};").format(sql.Identifier(schema_destination), sql.Identifier(schema_temporary))
-            sql_load_to_dest = sql.SQL("ALTER SCHEMA {} RENAME TO {};").format(sql.Identifier(schema_loading), sql.Identifier(schema_destination))
-            sql_tmp_to_load = sql.SQL("ALTER SCHEMA {} RENAME TO {};").format(sql.Identifier(schema_temporary), sql.Identifier(schema_loading))
+            sql_dest_to_tmp = sql.SQL("ALTER SCHEMA {} RENAME TO {};").format(sql.Identifier(schema_destination),
+                                                                              sql.Identifier(schema_temporary))
+            sql_load_to_dest = sql.SQL("ALTER SCHEMA {} RENAME TO {};").format(sql.Identifier(schema_loading),
+                                                                               sql.Identifier(schema_destination))
+            sql_tmp_to_load = sql.SQL("ALTER SCHEMA {} RENAME TO {};").format(sql.Identifier(schema_temporary),
+                                                                              sql.Identifier(schema_loading))
             self.logger.info("Swapping schema %s with %s" % (schema_destination, schema_loading))
             self.logger.debug("Renaming schema %s in %s" % (schema_destination, schema_temporary))
             self.pgsql_cur.execute(sql_dest_to_tmp)
@@ -4079,7 +4068,7 @@ class pg_engine(object):
             self.pgsql_cur.execute(sql_load_to_dest)
             self.logger.debug("Renaming schema %s in %s" % (schema_temporary, schema_loading))
             self.pgsql_cur.execute(sql_tmp_to_load)
-            self.logger.debug("Commit the swap transaction" )
+            self.logger.debug("Commit the swap transaction")
             self.pgsql_conn.commit()
             self.set_autocommit_db(True)
 
@@ -4090,8 +4079,8 @@ class pg_engine(object):
 
             :param id_batch: the id batch to set as processed
         """
-        self.logger.debug("updating batch %s to processed" % (id_batch, ))
-        sql_update="""
+        self.logger.debug("updating batch %s to processed" % (id_batch,))
+        sql_update = """
             UPDATE sch_chameleon.t_replica_batch
                 SET
                     b_processed=True,
@@ -4100,8 +4089,8 @@ class pg_engine(object):
                 i_id_batch=%s
             ;
         """
-        self.pgsql_cur.execute(sql_update, (id_batch, ))
-        self.logger.debug("collecting events id for batch %s " % (id_batch, ))
+        self.pgsql_cur.execute(sql_update, (id_batch,))
+        self.logger.debug("collecting events id for batch %s " % (id_batch,))
         sql_collect_events = """
             INSERT INTO
                 sch_chameleon.t_batch_events
@@ -4127,8 +4116,7 @@ class pg_engine(object):
                     i_id_batch
             ;
         """
-        self.pgsql_cur.execute(sql_collect_events, (id_batch, ))
-
+        self.pgsql_cur.execute(sql_collect_events, (id_batch,))
 
     def __swap_enums(self):
         """
@@ -4156,13 +4144,17 @@ class pg_engine(object):
             enum_list = self.pgsql_cur.fetchall()
             for enumeration in enum_list:
                 type_name = enumeration[0]
-                sql_drop_origin = sql.SQL("DROP TYPE IF EXISTS {}.{} CASCADE;").format(sql.Identifier(schema_destination),sql.Identifier(type_name))
-                sql_set_schema_new = sql.SQL("ALTER TYPE {}.{} SET SCHEMA {};").format(sql.Identifier(schema_loading),sql.Identifier(type_name), sql.Identifier(schema_destination))
+                sql_drop_origin = sql.SQL("DROP TYPE IF EXISTS {}.{} CASCADE;").format(
+                    sql.Identifier(schema_destination), sql.Identifier(type_name))
+                sql_set_schema_new = sql.SQL("ALTER TYPE {}.{} SET SCHEMA {};").format(sql.Identifier(schema_loading),
+                                                                                       sql.Identifier(type_name),
+                                                                                       sql.Identifier(
+                                                                                           schema_destination))
                 self.logger.debug("Dropping the original tpye %s.%s " % (schema_destination, type_name))
                 self.pgsql_cur.execute(sql_drop_origin)
-                self.logger.debug("Changing the schema for type %s.%s to %s" % (schema_loading, type_name, schema_destination))
+                self.logger.debug(
+                    "Changing the schema for type %s.%s to %s" % (schema_loading, type_name, schema_destination))
                 self.pgsql_cur.execute(sql_set_schema_new)
-
 
     def swap_tables(self):
         """
@@ -4174,16 +4166,22 @@ class pg_engine(object):
             schema_destination = self.schema_loading[schema]["destination"]
             for table in self.schema_tables[schema]:
                 self.logger.info("Swapping table %s.%s with %s.%s" % (schema_destination, table, schema_loading, table))
-                sql_drop_origin = sql.SQL("DROP TABLE IF EXISTS {}.{} ;").format(sql.Identifier(schema_destination),sql.Identifier(table))
-                sql_set_schema_new = sql.SQL("ALTER TABLE {}.{} SET SCHEMA {};").format(sql.Identifier(schema_loading),sql.Identifier(table), sql.Identifier(schema_destination))
+                sql_drop_origin = sql.SQL("DROP TABLE IF EXISTS {}.{} ;").format(sql.Identifier(schema_destination),
+                                                                                 sql.Identifier(table))
+                sql_set_schema_new = sql.SQL("ALTER TABLE {}.{} SET SCHEMA {};").format(sql.Identifier(schema_loading),
+                                                                                        sql.Identifier(table),
+                                                                                        sql.Identifier(
+                                                                                            schema_destination))
                 self.logger.debug("Dropping the original table %s.%s " % (schema_destination, table))
                 self.pgsql_cur.execute(sql_drop_origin)
-                self.logger.debug("Changing the schema for table %s.%s to %s" % (schema_loading, table, schema_destination))
+                self.logger.debug(
+                    "Changing the schema for table %s.%s to %s" % (schema_loading, table, schema_destination))
                 self.pgsql_cur.execute(sql_set_schema_new)
                 self.pgsql_conn.commit()
 
         self.set_autocommit_db(True)
         self.__swap_enums()
+
     def create_database_schema(self, schema_name):
         """
             The method creates a database schema.
